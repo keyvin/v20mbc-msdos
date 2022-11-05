@@ -1,3 +1,4 @@
+#How to run it#
 Copy these files to the root of your v20mbc
 (back up your SD FIRST!!)
 
