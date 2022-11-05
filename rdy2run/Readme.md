@@ -7,6 +7,9 @@ Select autoboot
 
 Image contains masm, link, dos utils, and basic. 
 
+If you use terraterm, make sure to set language to english
+and select a font. By default the \ char is mapped to Yen
+
 Adding software with dosbox-x- 
 	mount the disk image in dosbox-x
 	imgmount f ds1n00.dsk -t hdd -fs fat
