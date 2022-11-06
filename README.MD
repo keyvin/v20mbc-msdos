@@ -65,7 +65,7 @@ If you change the boot block definition, you will need to alter seltrack to acco
 copy autoboot.bin and ds00n00.dsk & ds01n00.dsk to v20mbc 	
 Follow directions in rdy2run
 
-## Adding software##
+## Adding software
 
 mount the disk image in dosbox-x:
 	imgmount f ds1n00.dsk -t hdd -fs fat
