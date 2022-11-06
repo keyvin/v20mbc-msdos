@@ -1,7 +1,7 @@
-#Built Image
+# Built Image
 copy autoboot.bin and ds1n00.dsk
 
-#How to run it
+# How to run it
 Copy these files to the root of your v20mbc
 (back up your SD FIRST!!)
 

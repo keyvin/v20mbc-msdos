@@ -44,13 +44,13 @@ Edit skelio.asm to your tastes, primarily to set max memory size -
 * Since loader loads logical sectors, this is the position of msdos in memory
 * The fat12 format used is 8 sectors/cluster. 
 * msdos will be 512*8 bytes after start of bios
-** If your bios becomes larger than 4kb, this will be 512*16 **
- ** You may need to alter the loader to load more sectors ** 
+* If your bios becomes larger than 4kb, this will be 512*16 
+* You may need to alter the loader to load more sectors ** 
 
-*Bios size - this allows moving msdos.sys to just after the  bios to save some bytes of memory. I am currently wasting space
+* Bios size - this allows moving msdos.sys to just after the  bios to save some bytes of memory. I am currently wasting space
 
-*Bios segment - this is where the loader places the bios, my loader uses 00C0
-
+* Bios segment - this is where the loader places the bios, my loader uses 00C0
+ 
 If you change the boot block definition, you will need to alter seltrack to account for a different sectors per track *The value is hard coded in the function*
 
 ## Build Image
