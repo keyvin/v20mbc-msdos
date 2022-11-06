@@ -4,8 +4,10 @@
 ![My Image](pic.PNG)
 
 IMPORTANT: The files in this repository are under a variety of licenses. 
+
 IMPORTANT: No warranty given, no liability accepted if you chose to use this
-IMPORTANT: WARNING: Here be bugs aplenty. 
+
+IMPORTANT: WARNING: Here be bugs aplenty. Don't change or reference other disks...
 
 Want to just run it and not build it? See rdy2run directory
 
