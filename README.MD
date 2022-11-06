@@ -59,7 +59,7 @@ If you change the boot block definition, you will need to alter seltrack to acco
 
 * This is not automatic. Input is needed. Watch for errors*
 
-* AT PROMPT SEGMENT NEEDED ENTER YOUR BIOS SEGMENT (00C0)*
+* There is a prompt asking for a segment. Enter 00C0 (your bios segment)
  
 ## Run image
 copy autoboot.bin and ds00n00.dsk & ds01n00.dsk to v20mbc 	
