@@ -1,0 +1,7 @@
+8MB, fat12, sectors per cluster of 8, fatcopies 2, rootdir 512.
+
+reserved sectors 17
+
+Bios located at: 7A00
+msdos.sys located at 
+
