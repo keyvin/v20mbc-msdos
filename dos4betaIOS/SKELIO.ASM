@@ -16,7 +16,7 @@ ANSI    EQU     0               ;Ansi switch.
 
 QSIZE   EQU     100             ;Input queue size.
 BIOSSEG EQU     0C0H            ;I/O system segment.
-MAX_MEM EQU     0E000H           ;Memory size in paragraphs. 
+MAX_MEM EQU     0EFFH           ;Memory size in paragraphs. 
 
 ; Constants for commands in Altos ROM.
 
@@ -741,8 +741,8 @@ LDDRIV1 DBP     <,,512,1,24,2,128,924,0F8H,3,12>
 LDDRIV2	DBP	    <,,1024,1,16,2,128,616,0F9H,1,8>
 
 DSK_INIT:
-		MOV     AX,1
-		
+		XOR     AX,AX
+		MOV     AL,[SI.MEDIAID]
         MOV     SI,OFFSET INITTAB
         JMP     GET_BP5
 
@@ -757,6 +757,7 @@ DDENS   EQU     55H             ;Density select port.
 DDBIT	EQU	    04H		        ;Density select bit.
 DSELECT EQU     53H             ;Drive select port.
 CURDRV  DB      0
+LASTDRV DB      0
 DRVTAB  DB      0EH,0DH,0BH,07H
 TRKPT   DB      0,1,2,3
 TRKTAB  DB      -1,-1,-1,-1
@@ -877,6 +878,7 @@ BPB3    DW      ?                       ;DWORD pointer to BPB
 BPBS    ENDS
 
 GET_BPB:
+		XOR AH,AH
 GET_BP1:
 
 GET_BP3:MOV     SI,OFFSET LSDRIV1 ;No compares - it's a 720kb diskette img
