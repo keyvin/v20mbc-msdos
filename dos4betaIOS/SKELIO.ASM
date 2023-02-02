@@ -649,8 +649,8 @@ TIMER_INT:
 	   MOV DS,AX
 	   MOV DI, OFFSET TIM_HSEC
 	   MOV AL,[CS:DI]
-	   INC AL
-	   CMP AL,10
+	   add al,10
+	   CMP AL,100
 	   MOV [DI],AL
 	   JNZ TIM_NC
 	   XOR AL,AL
@@ -692,10 +692,28 @@ TIM_NC:
 	   
 
 
-TIM_INIT:
-		sti
-		JMP EXIT
-		
+TIMER_INIT:
+		CLI
+		MOV AL,90h
+		OUT 01h,AL
+		IN  AL,00h
+		MOV BX, OFFSET TIM_SECS
+		MOV CS:[BX], AL
+		MOV BX, OFFSET TIM_MINS
+		IN AL,00h
+		MOV CS:[BX], AL
+		MOV BX, OFFSET TIM_HRS
+		IN AL,00H
+		MOV CS:[BX], AL
+		MOV BX, OFFSET TIM_DAYS
+		IN AL,00H
+		MOV CS:[BX], AL
+		INC BX
+		IN AL, 00H
+		MOV CS:[BX], AL
+		STI
+		;JMP EXIT
+		RET
 
 TIM_WRT:
 		CLI
@@ -1160,6 +1178,7 @@ RE_INIT:
 		MOV BX, SYSTSEG 
 		MOV CX, BIOSSEG
 		MOV DS:[BX], CX
+		CALL TIMER_INIT	
 		CLI
 		mov bx,ax
 		MOV AL,2
@@ -1167,6 +1186,7 @@ RE_INIT:
 		MOV AL,2   ;write to interrupt register
 		OUT 00H,AL
 		mov ds,bx
+	
 		STI
 	    RET
 _jnk endp

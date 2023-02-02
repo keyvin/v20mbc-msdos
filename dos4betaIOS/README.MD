@@ -1,7 +1,7 @@
 # MSDOS 2.11 adapted for the Just for Fun v20mbc
 ** Requires 1024KB
 
-![My Image](beta.png)
+![My Image](beta.PNG)
 
 IMPORTANT: The files in this repository are under a variety of licenses. 
 IMPORTANT: No warranty given, no liability accepted if you chose to use this
@@ -16,7 +16,9 @@ https://github.com/SuperFabius/A250220_DEVEL
 
 EDIT line 214 and 215 to the following:
 #define   SERIALRXIRQ_VECTOR    0x40         
-#define   SYSTICKIRQ_VECTOR     0x41             
+#define   SYSTICKIRQ_VECTOR     0x41   
+
+FOR rtc SUPPORT USE MY MODIFIED IOS IN THE ZIP FILE          
 
 
 
