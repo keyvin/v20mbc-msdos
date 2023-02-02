@@ -1,7 +1,7 @@
 # MSDOS 2.11 adapted for the Just for Fun v20mbc
 ** Requires 1024KB
 
-![My Image](pic.PNG)
+![My Image](beta.PNG)
 
 IMPORTANT: The files in this repository are under a variety of licenses. 
 IMPORTANT: No warranty given, no liability accepted if you chose to use this
@@ -45,7 +45,7 @@ Win32 nasm is included. Use a nasm for your platform.
 build loader with nasm: 
     nasm loader.asm -fbin
 
-copy loader.asm to autoboot.bin
+copy loader.asm to msdos.bin
 
 ## Customize Bios
 Edit skelio.asm to your tastes, primarily to set max memory size - 
@@ -78,7 +78,7 @@ Follow directions in rdy2run
 ## Adding software##
 
 mount the disk image in dosbox-x:
-	imgmount f ds1n00.dsk -t hdd -fs fat
+	imgmount f ds2n00.dsk -t hdd -fs fat
 
 There is now support for four disks (a, b, c, d) drives
 You can now copy files to the image. Close dosbox-x and recopy to SD. 
