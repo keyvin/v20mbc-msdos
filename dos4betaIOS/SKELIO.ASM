@@ -5,6 +5,9 @@
 
 ; I/O system for Version 2.x of MSDOS.
 
+SYSTICK EQU  104h
+SYSTSEG EQU  106h             ;TIMER vector table
+SYSRX   EQU  134                 ;RX Interrupt
 ;This BIOS designed to be linked with the SYSINIT module provided by
 ;Microsoft
 
@@ -16,7 +19,7 @@ ANSI    EQU     0               ;Ansi switch.
 
 QSIZE   EQU     100             ;Input queue size.
 BIOSSEG EQU     0C0H            ;I/O system segment.
-MAX_MEM EQU     0EFFH           ;Memory size in paragraphs. 
+MAX_MEM EQU     0F000H           ;Memory size in paragraphs. 
 
 ; Constants for commands in Altos ROM.
 
@@ -297,23 +300,23 @@ TIM_INT:
 DSK0_INT:
         PUSH    SI
         MOV     SI,OFFSET DSKTBL
-		mov     [curdrv],0           ;set current drive 
+		mov     CS:[curdrv],0           ;set current drive 
 		jmp     SHORT ENTRY
 
 DSK1_INT:
         PUSH    SI
         MOV     SI,OFFSET DSKTBL
-		mov     [curdrv],1
+		mov     CS:[curdrv],1
 		jmp     SHORT ENTRY
 DSK2_INT:
         PUSH    SI
         MOV     SI,OFFSET DSKTBL
-		mov     [curdrv],2
+		mov     CS:[curdrv],2
 		jmp     SHORT ENTRY
 DSK3_INT:
         PUSH    SI
         MOV     SI,OFFSET DSKTBL
-		mov     [curdrv],3
+		mov     CS:[curdrv],3
 ;
 ; Common program for handling the simplistic I/O packet
 ;   processing scheme in MSDOS 2.0
@@ -415,7 +418,7 @@ CHAR    DB      ?               ;Small typeahead buffer for now.
 ; Allow non destructive reads. 
 
 CISTAT: PUSH    CX              ;Save CX pair.
-        MOV     AL,[CHAR]
+        MOV     AL,cs:[CHAR]
         OR      AL,AL
         JNZ     CISTA9          ;Character still in buffer.
 CISTA1:    ;Check status. If ready, Read Char
@@ -425,7 +428,7 @@ CISTA1:    ;Check status. If ready, Read Char
 	    IN      AL,01H           ;ALWAYS RETURNS TX
         OR      AL,AL
         JZ      CISTA1          ;Got a null character.
-        MOV     [CHAR],AL
+        MOV     CS:[CHAR],AL
 CISTA9: POP     CX              ;Can't lose CX pair.
         RET
 
@@ -435,7 +438,7 @@ CISTA9: POP     CX              ;Can't lose CX pair.
 
 CINP:   CALL    CISTAT          ;Check for character ready in queue.
         JZ      CINP            ;Cycle until one ready.
-        MOV     [CHAR],0        ;We have character in AL, clear type a head.
+        MOV     CS:[CHAR],0        ;We have character in AL, clear type a head.
         RET
 
 ;
@@ -467,7 +470,7 @@ CON_READ:
 ;
 
 CON_FLSH:
-        MOV     [CHAR],0        ;Clear small type a head buffer.
+        MOV     CS:[CHAR],0        ;Clear small type a head buffer.
         JMP     EXIT
 
 ;
@@ -636,11 +639,67 @@ TIM_SECS: DB    ?               ;Seconds.
 ;
 ; Time write routine.
 ;
-TIM_INIT:
 
+TIMER_INT:
+	   cli
+	   PUSH DS
+	   PUSH AX
+	   PUSH DI
+	   MOV AX, BIOSSEG
+	   MOV DS,AX
+	   MOV DI, OFFSET TIM_HSEC
+	   MOV AL,[CS:DI]
+	   INC AL
+	   CMP AL,10
+	   MOV [DI],AL
+	   JNZ TIM_NC
+	   XOR AL,AL
+	   MOV [DI],AL
+	   MOV DI, OFFSET TIM_SECS
+	   MOV AL,[DI]
+	   INC AL
+	   CMP AL,60
+	   MOV [DI],AL
+	   JNZ TIM_NC
+	   XOR AL,AL
+	   MOV [DI],AL
+	   MOV DI, OFFSET TIM_MINS
+	   MOV AL,[DI]
+	   INC AL
+	   CMP AL,60
+	   MOV [DI],AL
+	   JNZ TIM_NC
+	   XOR AL,AL
+	   MOV [DI],AL
+	   MOV DI, OFFSET TIM_HRS
+	   MOV AL,[DI]
+	   INC AL
+	   CMP AL,60
+	   MOV [DI],AL
+	   JNZ TIM_NC
+	   XOR AL,AL
+	   MOV [DI],AL
+	   MOV DI,OFFSET TIM_DAYS
+	   MOV AX,[DI]
+	   INC AX
+	   MOV [DI],AX
+TIM_NC:
+	   POP DI
+	   POP AX
+	   POP DS
+	   STI
+	   IRET
+	   
+
+
+TIM_INIT:
+		sti
+		JMP EXIT
+		
 
 TIM_WRT:
-        MOV     SI,OFFSET TIM_DAYS
+		CLI
+		MOV     SI,OFFSET TIM_DAYS
         XCHG    SI,DI
         PUSH    ES
         MOV     AX,DS
@@ -649,18 +708,21 @@ TIM_WRT:
         MOV     CX,6
         REP     MOVSB
         MOV     AL,0
-        JMP     EXIT
+        STI
+		JMP     EXIT
 
 ;
 ; Time read routine.
 ;
 
 TIM_RED:
-        MOV     SI,OFFSET TIM_DAYS
+		CLI
+		MOV     SI,OFFSET TIM_DAYS
         MOV     CX,6
         REP     MOVSB
         MOV     AL,0
-        JMP     EXIT
+        STI
+		JMP     EXIT
 
         PAGE
         SUBTTL  8089 Monitor structure.
@@ -886,7 +948,7 @@ GET_BP3:MOV     SI,OFFSET LSDRIV1 ;No compares - it's a 720kb diskette img
 GET_BP4:MOV     AL,[SI.MEDIAID]
         ADD     SI,11           ;Convert to DPB pointer
 
-GET_BP5:LDS     BX,[PTRSAV]     ;Update I/O data packet. Called from init...
+GET_BP5:LDS     BX,CS:[PTRSAV]     ;Update I/O data packet. Called from init...
         MOV     [BX.BPB1],AL    ;Media byte.
         MOV     [BX.BPB3],SI    ;DPB pointer.
         MOV     [BX.BPB3+2],CS  ;Code segment.
@@ -1038,6 +1100,7 @@ DSK_SW:
     MOV 	BX,512
 	JMP 	DSK_SW
 E_DRW:
+	XOR     AL,AL
 	JMP 	EXIT	
 	
         PAGE
@@ -1085,10 +1148,27 @@ DERRTAB DB      40H             ; 0. Write protect error
 
 
 ;dumb, but needed for re_init far return.....
-_jnk proc far
+_jnk proc far	
 	OR ax,ax
+	
 RE_INIT:
-	RET
+		mov ax,ds
+		XOR BX,BX
+		MOV DS,BX
+		MOV BX, SYSTICK
+		MOV DS:[BX],OFFSET TIMER_INT
+		MOV BX, SYSTSEG 
+		MOV CX, BIOSSEG
+		MOV DS:[BX], CX
+		CLI
+		mov bx,ax
+		MOV AL,2
+		OUT 01H,AL
+		MOV AL,2   ;write to interrupt register
+		OUT 00H,AL
+		mov ds,bx
+		STI
+	    RET
 _jnk endp
 
 PUBLIC RE_INIT;

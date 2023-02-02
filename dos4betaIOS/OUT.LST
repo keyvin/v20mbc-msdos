@@ -1,0 +1,2171 @@
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-1
+                                                            
+
+                                ;LOOKS LIKE BIOS STARTS AT 2400 ON A 720KB DISK
+				 
+                                 
+                                 
+                                       TITLE   IO.SYS for the ALTOS ACS-86C. 
+                                 
+                                ; I/O system for Version 2.x of MSDOS. 
+                                 
+ = 008A                         SYSTICK EQU  138                ;TIMER vector t
+				able 
+ = 0086                         SYSRX   EQU  134                 ;RX Interrupt 
+                                ;This BIOS designed to be linked with the SYSIN
+				IT module provided by 
+                                ;Microsoft 
+                                 
+ = 1000                         BIOSIZ  EQU     1000H           ;Size of BIOS i
+				n bytes. 
+ = 0100                         BIOSIZS EQU     100H            ;Size of BIOS i
+				n Paragraphs. 
+ = 0000                         ANSI    EQU     0               ;Ansi switch. 
+                                 
+                                ;Additional Information for the ALTOS machine. 
+                                 
+ = 0064                         QSIZE   EQU     100             ;Input queue si
+				ze. 
+ = 00C0                         BIOSSEG EQU     0C0H            ;I/O system seg
+				ment. 
+ = F000                         MAX_MEM EQU     0F000H           ;Memory size i
+				n paragraphs.  
+                                 
+                                ; Constants for commands in Altos ROM. 
+                                 
+ = 0001                         ROM_CONSTA      EQU     01      ;Return status 
+				AL of console selected in CX. 
+ = 0002                         ROM_CONIN       EQU     02      ;Get char. from
+				 console in CX to AL 
+ = 0003                         ROM_CONOUT      EQU     03      ;Write char. in
+				 DL to console in CX. 
+ = 0007                         ROM_PMSG        EQU     07      ;Write string E
+				S:DX to console in CX. 
+ = 0008                         ROM_DISKIO      EQU     08      ;Perform disk I
+				/O from IOPB in ES:CX. 
+ = 000A                         ROM_INIT        EQU     10      ;Returns boot c
+				onsole and top memory ES:DX. 
+                                 
+                                ;Things needed to communicate with SYSINIT 
+                                 
+                                EXTRN   SYSINIT:FAR                   ;The entr
+				y point of SYSINIT 
+                                EXTRN   CURRENT_DOS_LOCATION:WORD     ;Where th
+				e DOS is when SYSINIT called 
+                                EXTRN   FINAL_DOS_LOCATION:WORD       ;Where I 
+				want SYSINIT to put the DOS 
+                                EXTRN   DEVICE_LIST:DWORD             ;Pointer 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-2
+                                                            
+
+				to the DEVICE list. 
+                                EXTRN   MEMORY_SIZE:WORD              ;Size in 
+				paragraphs of Physical memory. 
+                                EXTRN   DEFAULT_DRIVE:BYTE            ;Default 
+				Drive to use when system booted 
+                                EXTRN   BUFFERS:BYTE                  ;Number o
+				f default buffers. 
+                                                                      ; Leave a
+				s is and SYSINIT uses only 2. 
+                                 
+ 0000                           CODE    SEGMENT 
+                                ASSUME  CS:CODE,DS:CODE,ES:CODE,SS:CODE 
+                                 
+ 0000                                   ORG     0               ;Starts at an o
+				ffset of zero. 
+                                 
+ 0000  E9 05A9 R                INIT:   JMP     HWINIT 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-3
+                                                            
+
+                                        PAGE 
+                                 
+                                        SUBTTL  Device driver tables. 
+                                 
+                                ;----------------------------------------------
+				-+ 
+                                ;     DWORD pointer to next device             
+				 | 1 word offset. 
+                                ;         (-1,-1 if last device)               
+				 | 1 word segement. 
+                                ;----------------------------------------------
+				-+ 
+                                ;     Device attribute WORD                    
+				 ; 1 word. 
+                                ;       Bit 15 = 1 for chacter devices.        
+				 ; 
+                                ;                0 for Block devices.          
+				 ; 
+                                ;                                              
+				 ; 
+                                ;       Charcter devices. (Bit 15=1)           
+				 ; 
+                                ;         Bit 0 = 1  current sti device.       
+				 ; 
+                                ;         Bit 1 = 1  current sto device.       
+				 ; 
+                                ;         Bit 2 = 1  current NUL device.       
+				 ; 
+                                ;         Bit 3 = 1  current Clock device.     
+				 ; 
+                                ;                                              
+				 ; 
+                                ;         Bit 13 = 1 for non IBM machines.     
+				 ; 
+                                ;                  0 for IBM machines only.    
+				 ; 
+                                ;         Bit 14 = 1 IOCTL control bit.        
+				 ; 
+                                ;----------------------------------------------
+				-+ 
+                                ;     Device strategy pointer.                 
+				 ; 1 word offset. 
+                                ;----------------------------------------------
+				-+ 
+                                ;     Device interrupt pointer.                
+				 ; 1 word offset. 
+                                ;----------------------------------------------
+				-+ 
+                                ;     Device name field.                       
+				 ; 8 bytes. 
+                                ;       Character devices are any valid name   
+				 ; 
+                                ;         left justified, in a space filled    
+				 ; 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-4
+Device driver tables.                                       
+
+                                ;         field.                               
+				 ; 
+                                ;       Block devices contain # of units in    
+				 ; 
+                                ;         the first byte.                      
+				 ; 
+                                ;----------------------------------------------
+				-+ 
+                                 
+ 0003                           DEVSTART LABEL WORD 
+ 0003                           CONDEV:                         ;Header for dev
+				ice CON 
+ 0003  0015 R 00C0                      DW      AUXDEV,BIOSSEG  ;Link to next d
+				evice 
+ 0007  8003                             DW      8003H           ;Attributes - c
+				onsole input, output device 
+ 0009  011E R                           DW      STRATEGY        ;Srategy entry 
+				point 
+ 000B  0129 R                           DW      CON_INT         ;Interrupt entr
+				y point 
+ 000D  43 4F 4E 20 20 20 20             DB      "CON     "      ;Device name 
+       20                       
+                                 
+ 0015                           AUXDEV:                         ;Header for dev
+				ice AUX 
+ 0015  0027 R 00C0                      DW      PRNDEV,BIOSSEG 
+ 0019  8000                             DW      8000H 
+ 001B  011E R                           DW      STRATEGY 
+ 001D  0130 R                           DW      AUX_INT 
+ 001F  41 55 58 20 20 20 20             DB      "AUX     " 
+       20                       
+                                 
+ 0027                           PRNDEV:                         ;Header for dev
+				ice PRN 
+ 0027  0039 R 00C0                      DW      TIMDEV,BIOSSEG 
+ 002B  8000                             DW      8000H 
+ 002D  011E R                           DW      STRATEGY 
+ 002F  0137 R                           DW      PRN_INT 
+ 0031  50 52 4E 20 20 20 20             DB      "PRN     " 
+       20                       
+                                 
+ 0039                           TIMDEV:                         ;Header for dev
+				ice CLOCK 
+ 0039  004B R 00C0                      DW      DSK0DEV,BIOSSEG 
+ 003D  8008                             DW      8008H 
+ 003F  011E R                           DW      STRATEGY 
+ 0041  013D R                           DW      TIM_INT 
+ 0043  43 4C 4F 43 4B 20 20             DB      "CLOCK   " 
+       20                       
+                                 
+ 004B                           DSK0DEV:                            ;Header for
+				 disk devices 
+ 004B  005D R 00C0                      DW      DSK1DEV,BIOSSEG           ;Last
+				 device 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-5
+Device driver tables.                                       
+
+ 004F  2000                             DW      2000H           ;Is a block dev
+				ice 
+ 0051  011E R                           DW      STRATEGY 
+ 0053  0143 R                           DW      DSK0_INT 
+ 0055  01                               DB      1               ;Number of Unit
+				s 
+ 0056  0007[                            DB      7 DUP (?) 
+            ??                  
+                         ]      
+                                
+ 005D                           DSK1DEV:                            ;Header for
+				 disk devices 
+ 005D  006F R 00C0                      DW      DSK2DEV,BIOSSEG           ;Last
+				 device 
+ 0061  2000                             DW      2000H           ;Is a block dev
+				ice 
+ 0063  011E R                           DW      STRATEGY 
+ 0065  014F R                           DW      DSK1_INT 
+ 0067  01                               DB      1               ;Number of Unit
+				s 
+ 0068  0007[                            DB      7 DUP (?) 
+            ??                  
+                         ]      
+                                
+ 006F                           DSK2DEV: 
+ 006F  0081 R 00C0              		DW      DSK3DEV,BIOSSEG           ;Last devic
+				e 
+ 0073  2000                             DW      2000H           ;Is a block dev
+				ice 
+ 0075  011E R                           DW      STRATEGY 
+ 0077  015B R                           DW      DSK2_INT 
+ 0079  01                               DB      1               ;Number of Unit
+				s 
+ 007A  0007[                            DB      7 DUP (?) 
+            ??                  
+                         ]      
+                                
+ 0081                           DSK3DEV: 
+ 0081  FFFF FFFF                		DW      -1,-1           ;Last device 
+ 0085  2000                             DW      2000H           ;Is a block dev
+				ice 
+ 0087  011E R                           DW      STRATEGY 
+ 0089  0167 R                           DW      DSK3_INT 
+ 008B  01                               DB      1               ;Number of Unit
+				s 
+ 008C  0007[                            DB      7 DUP (?) 
+            ??                  
+                         ]      
+                                
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-6
+Device driver tables.                                       
+
+                                        PAGE 
+                                        SUBTTL  Dispatch tables for each device
+				. 
+                                 
+ 0093  03AE R                   DSKTBL: DW      DSK_INIT        ;0  - Initializ
+				e Driver. 
+ 0095  03CD R                           DW      MEDIAC          ;1  - Return cu
+				rrent media code. 
+ 0097  0440 R                           DW      GET_BPB         ;2  - Get Bios 
+				Parameter Block. 
+ 0099  01A4 R                           DW      CMDERR          ;3  - Reserved.
+				 (currently returns error) 
+ 009B  048B R                           DW      DSK_RED         ;4  - Block rea
+				d. 
+ 009D  01A0 R                           DW      BUS_EXIT        ;5  - (Not used
+				, return busy flag) 
+ 009F  01AB R                           DW      EXIT            ;6  - Return st
+				atus. (Not used) 
+ 00A1  01AB R                           DW      EXIT            ;7  - Flush inp
+				ut buffer. (Not used.) 
+ 00A3  04BD R                           DW      DSK_WRT         ;8  - Block wri
+				te. 
+ 00A5  04BD R                           DW      DSK_WRV         ;9  - Block wri
+				te with verify. 
+ 00A7  01AB R                           DW      EXIT            ;10 - Return ou
+				tput status. 
+ 00A9  01AB R                           DW      EXIT            ;11 - Flush out
+				put buffer. (Not used.) 
+ 00AB  01AB R                           DW      EXIT            ;12 - IO Contro
+				l. 
+                                 
+ 00AD  01AB R                   CONTBL: DW      EXIT            ;0  - Init. (No
+				t used) 
+ 00AF  01AB R                           DW      EXIT            ;1  - Media che
+				ck (Not used) 
+ 00B1  01AB R                           DW      EXIT            ;2  - Get Bios 
+				Parameter Block (Not used) 
+ 00B3  01A4 R                           DW      CMDERR          ;3  - Reserved.
+				 (Currently returns error) 
+ 00B5  01FB R                           DW      CON_READ        ;4  - Character
+				 read. (Destructive) 
+ 00B7  01EA R                           DW      CON_RDND        ;5  - Character
+				 read. (Non-destructive) 
+ 00B9  01AB R                           DW      EXIT            ;6  - Return st
+				atus. (Not used) 
+ 00BB  0203 R                           DW      CON_FLSH        ;7  - Flush Inp
+				ut buffer. 
+ 00BD  020C R                           DW      CON_WRIT        ;8  - Character
+				 write. 
+ 00BF  020C R                           DW      CON_WRIT        ;9  - Character
+				 write with Verify. 
+ 00C1  020A R                           DW      CON_WRST        ;10 - Character
+				 write status. 
+ 00C3  01AB R                           DW      EXIT            ;11 - Flush out
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-7
+Dispatch tables for each device.                            
+
+				put buffer. (Not used.) 
+ 00C5  01AB R                           DW      EXIT            ;12 - IO Contro
+				l. 
+                                 
+ 00C7  01AB R                   AUXTBL: DW      EXIT            ;0  - Init. (No
+				t used) 
+ 00C9  01AB R                           DW      EXIT            ;1  - Media che
+				ck (Not used) 
+ 00CB  01AB R                           DW      EXIT            ;2  - Get Bios 
+				Parameter Block (Not used) 
+ 00CD  01A4 R                           DW      CMDERR          ;3  - Reserved.
+				 (Returns an error) 
+ 00CF  0282 R                           DW      AUX_READ        ;4  - Character
+				 read. (Destructive) 
+ 00D1  0277 R                           DW      AUX_RDND        ;5  - Character
+				 read. (Non-destructive) 
+ 00D3  01AB R                           DW      EXIT            ;6  - Return st
+				atus. (Not used) 
+ 00D5  028B R                           DW      AUX_CLR         ;7  - Flush Inp
+				ut buffer. 
+ 00D7  0296 R                           DW      AUX_WRIT        ;8  - Character
+				 write. 
+ 00D9  0296 R                           DW      AUX_WRIT        ;9  - Character
+				 write with verify. 
+ 00DB  0293 R                           DW      AUX_WRST        ;10 - Character
+				 write status. 
+ 00DD  01AB R                           DW      EXIT            ;11 - Flush out
+				put buffer. (Not used.) 
+ 00DF  01AB R                           DW      EXIT            ;12 - IO Contro
+				l. 
+                                 
+ 00E1  01AB R                   TIMTBL: DW      EXIT            ;0  - Init. (No
+				t used) 
+ 00E3  01AB R                           DW      EXIT            ;1  - Media che
+				ck (Not used) 
+ 00E5  01AB R                           DW      EXIT            ;2  - Get Bios 
+				Parameter Block (Not used) 
+ 00E7  01A4 R                           DW      CMDERR          ;3  - Reserved.
+				 (Currently returns an error) 
+ 00E9  031D R                           DW      TIM_RED         ;4  - Character
+				 read. (Destructive) 
+ 00EB  01A0 R                           DW      BUS_EXIT        ;5  - (Not used
+				, returns busy flag.) 
+ 00ED  01AB R                           DW      EXIT            ;6  - Return st
+				atus. (Not used) 
+ 00EF  01AB R                           DW      EXIT            ;7  - Flush Inp
+				ut buffer. (Not used) 
+ 00F1  0306 R                           DW      TIM_WRT         ;8  - Character
+				 write. 
+ 00F3  0306 R                           DW      TIM_WRT         ;9  - Character
+				 write with verify. 
+ 00F5  01AB R                           DW      EXIT            ;10 - Character
+				 write status. (Not used) 
+ 00F7  01AB R                           DW      EXIT            ;11 - Flush out
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-8
+Dispatch tables for each device.                            
+
+				put buffer. (Not used) 
+ 00F9  01AB R                           DW      EXIT            ;12 - IO Contro
+				l. 
+                                 
+ 00FB  01AB R                   PRNTBL: DW      EXIT            ;0  - (Not used
+				) 
+ 00FD  01AB R                           DW      EXIT            ;1  - (Not used
+				) 
+ 00FF  01AB R                           DW      EXIT            ;2  - Block (No
+				t used) 
+ 0101  01A4 R                           DW      CMDERR          ;3  - Reserved.
+				 (currently returns error) 
+ 0103  01AB R                           DW      EXIT            ;4  - (Not used
+				) 
+ 0105  01A0 R                           DW      BUS_EXIT        ;5  - (Not used
+				, returns busy flag.) 
+ 0107  01AB R                           DW      EXIT            ;6  - (Not used
+				) 
+ 0109  01AB R                           DW      EXIT            ;7  - (Not used
+				) 
+ 010B  0226 R                           DW      PRN_WRT         ;8  - Character
+				 write. 
+ 010D  0226 R                           DW      PRN_WRT         ;9  - Character
+				 write with verify. 
+ 010F  0224 R                           DW      PRN_STA         ;10 - Character
+				 write status. 
+ 0111  01AB R                           DW      EXIT            ;11 - (Not used
+				.) 
+ 0113  01AB R                           DW      EXIT            ;12 - IO Contro
+				l. 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-9
+Dispatch tables for each device.                            
+
+                                        PAGE 
+                                        SUBTTL  Strategy and Software Interrupt
+				 routines. 
+                                 
+                                ;Define offsets for io data packet 
+                                 
+                                IODAT   STRUC 
+ 0000  ??                       CMDLEN  DB      ?               ;LENGTH OF THIS
+				 COMMAND 
+ 0001  ??                       UNIT    DB      ?               ;SUB UNIT SPECI
+				FIER 
+ 0002  ??                       CMD     DB      ?               ;COMMAND CODE 
+ 0003  ????                     STATUS  DW      ?               ;STATUS 
+ 0005  0008[                            DB      8 DUP (?) 
+            ??                  
+                         ]      
+                                
+ 000D  ??                       MEDIA   DB      ?               ;MEDIA DESCRIPT
+				OR 
+ 000E  ????????                 TRANS   DD      ?               ;TRANSFER ADDRE
+				SS 
+ 0012  ????                     COUNT   DW      ?               ;COUNT OF BLOCK
+				S OR CHARACTERS 
+ 0014  ????                     START   DW      ?               ;FIRST BLOCK TO
+				 TRANSFER 
+ 0016                           IODAT   ENDS 
+                                 
+ 0115  00 00 00 00              PTRSAV  DD 0               ;Strategy pointer sa
+				ve. 
+ 0119  00                       BADCOUNTRY DB 0 
+ 011A  00                       BADLD_POST DB 0 
+ 011B  00                       BADSIZ_POST DB 0 
+ 011C  00                       BADLD_PRE  DB 0 
+ 011D  00                       BADSIZ_PRE DB 0 
+                                PUBLIC BADCOUNTRY 
+                                PUBLIC BADLD_POST 
+                                PUBLIC BADSIZ_POST 
+                                PUBLIC BADLD_PRE 
+                                PUBLIC BADSIZ_PRE 
+                                 
+                                ; 
+                                ; Simplistic Strategy routine for non-multi-Tas
+				king system. 
+                                ; 
+                                ;   Currently just saves I/O packet pointers in
+				 PTRSAV for 
+                                ;   later processing by the individual interrup
+				t routines. 
+                                ; 
+                                 
+ 011E                           STRATP  PROC    FAR 
+                                 
+ 011E                           STRATEGY: 
+ 011E  2E: 89 1E 0115 R                 MOV     WORD PTR CS:[PTRSAV],BX 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-10
+Strategy and Software Interrupt routines.                   
+
+ 0123  2E: 8C 06 0117 R                 MOV     WORD PTR CS:[PTRSAV+2],ES 
+ 0128  CB                               RET 
+                                 
+                                STRATP  ENDP 
+                                 
+                                ; 
+                                ; Console interrupt routine for processing I/O 
+				packets. 
+                                ; 
+                                 
+ 0129                           CON_INT: 
+ 0129  56                               PUSH    SI 
+ 012A  BE 00AD R                        MOV     SI,OFFSET CONTBL 
+ 012D  EB 42 90                         JMP     ENTRY 
+                                 
+                                ; 
+                                ; Auxilary interrupt routine for processing I/O
+				 packets. 
+                                ; 
+                                 
+ 0130                           AUX_INT: 
+ 0130  56                               PUSH    SI 
+ 0131  BE 00C7 R                        MOV     SI,OFFSET AUXTBL 
+ 0134  EB 3B 90                         JMP     ENTRY 
+                                 
+                                ; 
+                                ; Printer interrupt routine for processing I/O 
+				packets. 
+                                ; 
+                                 
+ 0137                           PRN_INT: 
+ 0137  56                               PUSH    SI 
+ 0138  BE 00FB R                        MOV     SI,OFFSET PRNTBL 
+ 013B  EB 34                            JMP     SHORT ENTRY 
+                                 
+                                ; 
+                                ; Clock interrupt routine for processing I/O pa
+				ckets. 
+                                ; 
+                                 
+ 013D                           TIM_INT: 
+ 013D  56                               PUSH    SI 
+ 013E  BE 00E1 R                        MOV     SI,OFFSET TIMTBL 
+ 0141  EB 2E                            JMP     SHORT ENTRY 
+                                 
+                                ; 
+                                ; Disk interrupt routine for processing I/O pac
+				kets. 
+                                ; 
+                                 
+ 0143                           DSK0_INT: 
+ 0143  56                               PUSH    SI 
+ 0144  BE 0093 R                        MOV     SI,OFFSET DSKTBL 
+ 0147  C6 06 03BB R 00 90       		mov     [curdrv],0           ;set current dri
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-11
+Strategy and Software Interrupt routines.                   
+
+				ve  
+ 014D  EB 22                    		jmp     SHORT ENTRY 
+                                 
+ 014F                           DSK1_INT: 
+ 014F  56                               PUSH    SI 
+ 0150  BE 0093 R                        MOV     SI,OFFSET DSKTBL 
+ 0153  C6 06 03BB R 01 90       		mov     [curdrv],1 
+ 0159  EB 16                    		jmp     SHORT ENTRY 
+ 015B                           DSK2_INT: 
+ 015B  56                               PUSH    SI 
+ 015C  BE 0093 R                        MOV     SI,OFFSET DSKTBL 
+ 015F  C6 06 03BB R 02 90       		mov     [curdrv],2 
+ 0165  EB 0A                    		jmp     SHORT ENTRY 
+ 0167                           DSK3_INT: 
+ 0167  56                               PUSH    SI 
+ 0168  BE 0093 R                        MOV     SI,OFFSET DSKTBL 
+ 016B  C6 06 03BB R 03 90       		mov     [curdrv],3 
+                                ; 
+                                ; Common program for handling the simplistic I/
+				O packet 
+                                ;   processing scheme in MSDOS 2.0 
+                                ; 
+                                 
+ 0171  50                       ENTRY:  PUSH    AX              ;Save all nessa
+				cary registers. 
+ 0172  51                               PUSH    CX 
+ 0173  52                               PUSH    DX 
+ 0174  57                               PUSH    DI 
+ 0175  55                               PUSH    BP 
+ 0176  1E                               PUSH    DS 
+ 0177  06                               PUSH    ES 
+ 0178  53                               PUSH    BX 
+                                 
+ 0179  2E: C5 1E 0115 R                 LDS     BX,CS:[PTRSAV]  ;Retrieve point
+				er to I/O Packet. 
+                                 
+ 017E  8A 47 01                         MOV     AL,[BX.UNIT]    ;AL = Unit code
+				. 
+ 0181  8A 67 0D                         MOV     AH,[BX.MEDIA]   ;AH = Media des
+				criptor. 
+ 0184  8B 4F 12                         MOV     CX,[BX.COUNT]   ;CX = Contains 
+				byte/sector count. 
+ 0187  8B 57 14                         MOV     DX,[BX.START]   ;DX = Starting 
+				Logical sector. 
+                                 
+ 018A  97                               XCHG    DI,AX           ;Move Unit & Me
+				dia into DI temporarily. 
+ 018B  8A 47 02                         MOV     AL,[BX.CMD]     ;Retrieve Comma
+				nd type. (1 => 11) 
+ 018E  32 E4                            XOR     AH,AH           ;Clear upper ha
+				lf of AX for calculation. 
+ 0190  03 F0                            ADD     SI,AX           ;Compute entry 
+				pointer in dispatch table. 
+ 0192  03 F0                            ADD     SI,AX 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-12
+Strategy and Software Interrupt routines.                   
+
+ 0194  3C 0B                            CMP     AL,11           ;Verify that no
+				t more than 11 commands. 
+ 0196  77 0C                            JA      CMDERR          ;Ah, well, erro
+				r out. 
+ 0198  97                               XCHG    AX,DI           ;Move Unit & Me
+				dia back where they belong. 
+ 0199  C4 7F 0E                         LES     DI,[BX.TRANS]   ;DI contains ad
+				dess of Transfer address. 
+                                                                ;ES contains se
+				gment. 
+ 019C  0E                               PUSH    CS 
+ 019D  1F                               POP     DS              ;Data segment s
+				ame as Code segment. 
+ 019E  FF 24                            JMP     [SI]            ;Perform I/O pa
+				cket command. 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-13
+Strategy and Software Interrupt routines.                   
+
+                                        PAGE 
+                                        SUBTTL  Common error and exit points. 
+                                 
+ 01A0                           BUS_EXIT:                       ;Device busy ex
+				it. 
+ 01A0  B4 03                            MOV     AH,00000011B    ;Set busy and d
+				one bits. 
+ 01A2  EB 09                            JMP     SHORT EXIT1 
+                                 
+ 01A4  B0 03                    CMDERR: MOV     AL,3            ;Set unknown co
+				mmand error #. 
+                                 
+                                ; 
+                                ;  Common error processing routine. 
+                                ;   AL contains actual error code. 
+                                ; 
+                                ;   Error # 0 = Write Protect violation. 
+                                ;           1 = Unkown unit. 
+                                ;           2 = Drive not ready. 
+                                ;           3 = Unknown command in I/O packet. 
+                                ;           4 = CRC error. 
+                                ;           5 = Bad drive request structure len
+				gth. 
+                                ;           6 = Seek error. 
+                                ;           7 = Unknown media discovered. 
+                                ;           8 = Sector not found. 
+                                ;           9 = Printer out of paper. 
+                                ;          10 = Write fault. 
+                                ;          11 = Read fault. 
+                                ;          12 = General failure. 
+                                ; 
+                                 
+ 01A6                           ERR_EXIT: 
+ 01A6  B4 81                            MOV     AH,10000001B    ;Set error and 
+				done bits. 
+ 01A8  F9                               STC                     ;Set carry bit 
+				also. 
+ 01A9  EB 02                            JMP     SHORT EXIT1     ;Quick way out.
+				 
+                                 
+ 01AB                           EXITP   PROC    FAR             ;Normal exit fo
+				r device drivers. 
+                                 
+ 01AB  B4 01                    EXIT:   MOV     AH,00000001B    ;Set done bit f
+				or MSDOS. 
+ 01AD  2E: C5 1E 0115 R         EXIT1:  LDS     BX,CS:[PTRSAV] 
+ 01B2  89 47 03                         MOV     [BX.STATUS],AX  ;Save operation
+				 compete and status. 
+                                 
+ 01B5  5B                               POP     BX              ;Restore regist
+				ers. 
+ 01B6  07                               POP     ES 
+ 01B7  1F                               POP     DS 
+ 01B8  5D                               POP     BP 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-14
+Common error and exit points.                               
+
+ 01B9  5F                               POP     DI 
+ 01BA  5A                               POP     DX 
+ 01BB  59                               POP     CX 
+ 01BC  58                               POP     AX 
+ 01BD  5E                               POP     SI 
+ 01BE  CB                               RET                             ;RESTOR
+				E REGS AND RETURN 
+                                EXITP   ENDP 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-15
+Common error and exit points.                               
+
+                                        PAGE 
+                                        SUBTTL  Main console I/O section. 
+                                 
+ 01BF  0001                     MCON    DW      0001H 
+ 01C1  0002                     PCON    DW      0002H 
+ 01C3  0003                     ACON    DW      0003H 
+                                 
+ 01C5  ??                       CHAR    DB      ?               ;Small typeahea
+				d buffer for now. 
+                                 
+                                ; 
+                                ; Console keyboard handler. 
+                                ; KNP - Claims to be a readahed buffer. In real
+				ity it's a "peek" buffer, to  
+                                ; Allow non destructive reads.  
+                                 
+ 01C6  51                       CISTAT: PUSH    CX              ;Save CX pair. 
+ 01C7  A0 01C5 R                        MOV     AL,[CHAR] 
+ 01CA  0A C0                            OR      AL,AL 
+ 01CC  75 0F                            JNZ     CISTA9          ;Character stil
+				l in buffer. 
+ 01CE                           CISTA1:    ;Check status. If ready, Read Char 
+ 01CE  E4 02                            IN      AL,02H 
+ 01D0  A8 04                            TEST    AL,04H           ;CHARACTER REA
+				DY IF BIT 3 SET  
+ 01D2  74 09                            JZ      CISTA9 
+ 01D4  E4 01                    	    IN      AL,01H           ;ALWAYS RETURNS T
+				X 
+ 01D6  0A C0                            OR      AL,AL 
+ 01D8  74 F4                            JZ      CISTA1          ;Got a null cha
+				racter. 
+ 01DA  A2 01C5 R                        MOV     [CHAR],AL 
+ 01DD  59                       CISTA9: POP     CX              ;Can't lose CX 
+				pair. 
+ 01DE  C3                               RET 
+                                 
+                                ; 
+                                ; Get a character from the buffer queue. 
+                                ; 
+                                 
+ 01DF  E8 01C6 R                CINP:   CALL    CISTAT          ;Check for char
+				acter ready in queue. 
+ 01E2  74 FB                            JZ      CINP            ;Cycle until on
+				e ready. 
+ 01E4  C6 06 01C5 R 00                  MOV     [CHAR],0        ;We have charac
+				ter in AL, clear type a head. 
+ 01E9  C3                               RET 
+                                 
+                                ; 
+                                ; Console read non-destructive. 
+                                ; 
+                                 
+ 01EA                           CON_RDND: 
+ 01EA  E8 01C6 R                        CALL    CISTAT          ;See if charact
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-16
+Main console I/O section.                                   
+
+				er ready. 
+ 01ED  74 0A                            JZ      CON_RDN2        ;No, return bus
+				y signal. 
+ 01EF                           CON_RDN1: 
+ 01EF  2E: C5 1E 0115 R                 LDS     BX,CS:[PTRSAV] 
+ 01F4  88 47 0D                         MOV     [BX.MEDIA],AL 
+ 01F7  EB B2                            JMP     EXIT 
+ 01F9                           CON_RDN2: 
+ 01F9  EB A5                            JMP     BUS_EXIT 
+                                 
+                                ; 
+                                ; Console destructive read. 
+                                ; 
+                                 
+ 01FB                           CON_READ: 
+ 01FB  E8 01DF R                        CALL    CINP            ;Get character.
+				 
+ 01FE  AA                               STOSB                   ;Save it in use
+				rs buffer. 
+ 01FF  E2 FA                            LOOP    CON_READ        ;Loop until CX 
+				is exhausted. 
+ 0201  EB A8                            JMP     EXIT 
+                                 
+                                ; 
+                                ; Console flush routine. (ctrl-c, ctrl-f, or ct
+				rl-s inspired) 
+                                ; 
+                                 
+ 0203                           CON_FLSH: 
+ 0203  C6 06 01C5 R 00                  MOV     [CHAR],0        ;Clear small ty
+				pe a head buffer. 
+ 0208  EB A1                            JMP     EXIT 
+                                 
+                                ; 
+                                ; Console output status routine. 
+                                ; 
+                                 
+ 020A                           CON_WRST: 
+ 020A  EB 9F                            JMP     EXIT            ;Yes, normal ex
+				it. 
+                                 
+                                ; 
+                                ; Console output routine. 
+                                ; 
+                                 
+ 020C                           CON_WRIT: 
+ 020C  8B F7                            MOV     SI,DI           ;Get destinatio
+				n to source. 
+ 020E                           CON_WRI1: 
+ 020E  26: AC                           LODS    BYTE PTR ES:[SI] 
+ 0210  51                               PUSH    CX 
+                                        ENDIF 
+                                IFE     ANSI 
+ 0211  E8 0219 R                        CALL    OUTCHR 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-17
+Main console I/O section.                                   
+
+                                        ENDIF 
+ 0214  59                               POP     CX 
+ 0215  E2 F7                            LOOP    CON_WRI1        ;Keep going unt
+				il user buffer through. 
+ 0217  EB 92                            JMP     EXIT 
+                                 
+                                ; 
+                                ; Console character output routine. 
+                                ; 
+                                 
+ 0219                           OUTCHR:  
+ 0219  8A E0                            MOV     AH,AL 
+ 021B  B0 01                    		MOV     AL,01H 
+ 021D  E6 01                            OUT     01H,AL 
+ 021F  8A C4                    		MOV     AL,AH 
+ 0221  E6 00                    		OUT     00H,AL 
+ 0223  C3                               RET 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-18
+Main console I/O section.                                   
+
+                                        PAGE 
+                                        SUBTTL  Printer buffer handler. 
+                                 
+                                ; 
+                                ; Printer status routine. 
+                                ; 
+                                 
+ 0224                           PRN_STA: 
+ 0224  EB 85                            JMP     EXIT 
+                                 
+                                ; 
+                                ; Printer write routine. 
+                                ; 
+                                 
+ 0226  8B F7                    PRN_WRT:MOV     SI,DI           ;Set source = d
+				estination index. 
+                                 
+ 0228  26: AC                   PRN_WR1:LODS    BYTE PTR ES:[SI];Get a data byt
+				e. 
+ 022A  51                               PUSH    CX 
+ 022B  8B 0E 01C1 R                     MOV     CX,[PCON] 
+ 022F  BB 0003                          MOV     BX,ROM_CONOUT 
+ 0232  8A D0                            MOV     DL,AL 
+ 0234  E8 0544 R                        CALL    ROM_CALL 
+ 0237  59                               POP     CX 
+ 0238  E2 EE                            LOOP    PRN_WR1 
+ 023A  C3                               RET 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-19
+Printer buffer handler.                                     
+
+                                        PAGE 
+                                        SUBTTL  Auxilary I/O routines. 
+                                 
+ 023B  00                       AUXCHAR DB      0               ;Temporary AUX 
+				ahead storage. 
+                                 
+                                ; 
+                                ; Status routine for Auxilary port. 
+                                ; 
+                                 
+ 023C  A0 023B R                AISTAT: MOV     AL,[AUXCHAR] 
+ 023F  84 C0                            TEST    AL,AL 
+ 0241  75 18                            JNZ     AISTA9          ;Character alre
+				ady waiting. 
+ 0243  8B 0E 01C3 R                     MOV     CX,[ACON] 
+ 0247  BB 0001                          MOV     BX,ROM_CONSTA 
+ 024A  E8 0544 R                        CALL    ROM_CALL 
+ 024D  84 C0                            TEST    AL,AL 
+ 024F  74 0A                            JZ      AISTA9          ;Still none wai
+				ting. 
+ 0251  8B 0E 01C3 R                     MOV     CX,[ACON] 
+ 0255  BB 0002                          MOV     BX,ROM_CONIN 
+ 0258  E8 0544 R                        CALL    ROM_CALL 
+ 025B  A2 023B R                AISTA9: MOV     [AUXCHAR],AL 
+ 025E  C3                               RET 
+                                 
+                                ; 
+                                ; Auxilary port read. 
+                                ; 
+                                 
+ 025F  E8 023C R                AIN:    CALL    AISTAT          ;Get status and
+				/or char. 
+ 0262  74 FB                            JZ      AIN             ;Cycle until on
+				e is ready. 
+ 0264  C6 06 023B R 00                  MOV     [AUXCHAR],0 
+ 0269  C3                               RET 
+                                 
+                                ; 
+                                ; Write routine for Auxilary port. 
+                                ; 
+                                 
+ 026A  8B 0E 01C3 R             AOUT:   MOV     CX,[ACON] 
+ 026E  BB 0003                          MOV     BX,ROM_CONOUT 
+ 0271  8A D0                            MOV     DL,AL 
+ 0273  E8 0544 R                        CALL    ROM_CALL 
+ 0276  C3                               RET 
+                                 
+                                ; 
+                                ; Non-Destructive Auxilary read routine. 
+                                ; 
+                                 
+ 0277                           AUX_RDND: 
+ 0277  E8 023C R                        CALL    AISTAT          ;Get status and
+				 copy of char. waiting if any. 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-20
+Auxilary I/O routines.                                      
+
+ 027A  74 03                            JZ      AUX_RDN2        ;No character w
+				aiting, exit. 
+ 027C  E9 01EF R                        JMP     CON_RDN1 
+ 027F                           AUX_RDN2: 
+ 027F  E9 01A0 R                        JMP     BUS_EXIT 
+                                 
+                                ; 
+                                ; Destructive Auxilary read routine. 
+                                ; 
+                                 
+ 0282                           AUX_READ: 
+ 0282  E8 025F R                        CALL    AIN             ;Get data chara
+				cter. 
+ 0285  AA                               STOSB                   ;Save it throug
+				h DI. 
+ 0286  E2 FA                            LOOP    AUX_READ        ;Cycle until us
+				er buffer full. 
+ 0288  E9 01AB R                        JMP     EXIT 
+                                 
+                                ; 
+                                ; Auxilary clear type a head. 
+                                ; 
+                                 
+ 028B                           AUX_CLR: 
+ 028B  C6 06 023B R 00                  MOV     [AUXCHAR],0 
+ 0290  E9 01AB R                        JMP     EXIT 
+                                 
+                                ; 
+                                ; Auxilary write port status. 
+                                ; 
+                                 
+ 0293                           AUX_WRST: 
+ 0293  E9 01AB R                        JMP     EXIT 
+                                 
+                                ; 
+                                ; Auxilary write. 
+                                ; 
+                                 
+ 0296                           AUX_WRIT: 
+ 0296  8B F7                            MOV     SI,DI 
+ 0298                           AUX_WRI1: 
+ 0298  26: AC                           LODS    BYTE PTR ES:[SI]        ;Get ch
+				ar. from users buffer. 
+ 029A  E8 026A R                        CALL    AOUT            ;Send it to dev
+				ice. 
+ 029D  E2 F9                            LOOP    AUX_WRI1        ;Cycle until al
+				l done. 
+ 029F  E9 01AB R                        JMP     EXIT 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-21
+Auxilary I/O routines.                                      
+
+                                        PAGE 
+                                        SUBTTL  Date/Time Routines. 
+                                 
+ 02A2  0002[                    TIM_DAYS: DB    2 DUP (?)       ;Number of days
+				 since 1-1-80. 
+            ??                  
+                         ]      
+                                
+ 02A4  ??                       TIM_MINS: DB    ?               ;Minutes. 
+ 02A5  ??                       TIM_HRS:  DB    ?               ;Hours. 
+ 02A6  ??                       TIM_HSEC: DB    ?               ;Hundreths of a
+				 second. 
+ 02A7  ??                       TIM_SECS: DB    ?               ;Seconds. 
+                                 
+                                ; 
+                                ; Time write routine. 
+                                ; 
+                                 
+ 02A8                           TIMER_INT: 
+ 02A8  FA                       	   cli 
+ 02A9  CF                       	   iret 
+ 02AA  1E                       	   PUSH DS 
+ 02AB  50                       	   PUSH AX 
+ 02AC  57                       	   PUSH DI 
+ 02AD  B8 00C0                  	   MOV AX, BIOSSEG 
+ 02B0  8E D8                    	   MOV DS,AX 
+ 02B2  BF 02A6 R                	   MOV DI, OFFSET TIM_HSEC 
+ 02B5  8A 05                    	   MOV AL,[CS:DI] 
+ 02B7  FE C0                    	   INC AL 
+ 02B9  3C 64                    	   CMP AL,100 
+ 02BB  88 05                    	   MOV [DI],AL 
+ 02BD  75 3F                    	   JNZ TIM_NC 
+ 02BF  32 C0                    	   XOR AL,AL 
+ 02C1  88 05                    	   MOV [DI],AL 
+ 02C3  BF 02A7 R                	   MOV DI, OFFSET TIM_SECS 
+ 02C6  8A 05                    	   MOV AL,[DI] 
+ 02C8  FE C0                    	   INC AL 
+ 02CA  3C 3C                    	   CMP AL,60 
+ 02CC  88 05                    	   MOV [DI],AL 
+ 02CE  75 2E                    	   JNZ TIM_NC 
+ 02D0  32 C0                    	   XOR AL,AL 
+ 02D2  88 05                    	   MOV [DI],AL 
+ 02D4  BF 02A4 R                	   MOV DI, OFFSET TIM_MINS 
+ 02D7  8A 05                    	   MOV AL,[DI] 
+ 02D9  FE C0                    	   INC AL 
+ 02DB  3C 3C                    	   CMP AL,60 
+ 02DD  88 05                    	   MOV [DI],AL 
+ 02DF  75 1D                    	   JNZ TIM_NC 
+ 02E1  32 C0                    	   XOR AL,AL 
+ 02E3  88 05                    	   MOV [DI],AL 
+ 02E5  BF 02A5 R                	   MOV DI, OFFSET TIM_HRS 
+ 02E8  8A 05                    	   MOV AL,[DI] 
+ 02EA  FE C0                    	   INC AL 
+ 02EC  3C 3C                    	   CMP AL,60 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-22
+Date/Time Routines.                                         
+
+ 02EE  88 05                    	   MOV [DI],AL 
+ 02F0  75 0C                    	   JNZ TIM_NC 
+ 02F2  32 C0                    	   XOR AL,AL 
+ 02F4  88 05                    	   MOV [DI],AL 
+ 02F6  BF 02A2 R                	   MOV DI,OFFSET TIM_DAYS 
+ 02F9  8B 05                    	   MOV AX,[DI] 
+ 02FB  40                       	   INC AX 
+ 02FC  89 05                    	   MOV [DI],AX 
+ 02FE                           TIM_NC: 
+ 02FE  5F                       	   POP DI 
+ 02FF  58                       	   POP AX 
+ 0300  1F                       	   POP DS 
+ 0301  FB                       	   STI 
+ 0302  CF                       	   IRET 
+                                	    
+                                 
+                                 
+ 0303                           TIM_INIT: 
+                                 
+ 0303  E9 01AB R                		JMP EXIT 
+                                		 
+                                 
+ 0306                           TIM_WRT: 
+ 0306  FA                       		CLI 
+ 0307  BE 02A2 R                		MOV     SI,OFFSET TIM_DAYS 
+ 030A  87 F7                            XCHG    SI,DI 
+ 030C  06                               PUSH    ES 
+ 030D  8C D8                            MOV     AX,DS 
+ 030F  1F                               POP     DS 
+ 0310  8E C0                            MOV     ES,AX 
+ 0312  B9 0006                          MOV     CX,6 
+ 0315  F3/ A4                           REP     MOVSB 
+ 0317  B0 00                            MOV     AL,0 
+ 0319  FB                               STI 
+ 031A  E9 01AB R                		JMP     EXIT 
+                                 
+                                ; 
+                                ; Time read routine. 
+                                ; 
+                                 
+ 031D                           TIM_RED: 
+ 031D  FA                               CLI 
+ 031E  BE 02A2 R                		MOV     SI,OFFSET TIM_DAYS 
+ 0321  B9 0006                          MOV     CX,6 
+ 0324  F3/ A4                           REP     MOVSB 
+ 0326  B0 00                            MOV     AL,0 
+ 0328  FB                       		STI 
+ 0329  E9 01AB R                        JMP     EXIT 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-23
+Date/Time Routines.                                         
+
+                                        PAGE 
+                                        SUBTTL  8089 Monitor structure. 
+                                 
+                                 
+                                ; 
+                                ; Structure to reference 8089 and ROM command t
+				able. 
+                                ; 
+                                 
+                                SIOPB   STRUC 
+ 0000  0004[                            DB      4 DUP (?)       ;Monitor Use On
+				ly 
+            ??                  
+                         ]      
+                                
+ 0004  ??                       OPCODE  DB      ?               ;I/O operation 
+				code. 
+ 0005  ??                       DRIVE   DB      ?               ;Logical drive 
+				spec. 
+ 0006  ????                     TRACK   DW      ?               ;Logical track 
+				number. 
+ 0008  ??                       HEAD    DB      ?               ;Logical head n
+				umber. 
+ 0009  ??                       SECTOR  DB      ?               ;Logical sector
+				 to start with. 
+ 000A  ??                       SCOUNT  DB      ?               ;Number of logi
+				cal sectors in buffer. 
+ 000B  ??                       RETCODE DB      ?               ;Error code aft
+				er masking. 
+ 000C  ??                       RETMASK DB      ?               ;Error mask. 
+ 000D  ??                       RETRIES DB      ?               ;Number of retr
+				ies before error exit. 
+ 000E  ????                     DMAOFF  DW      ?               ;Buffer offset 
+				address. 
+ 0010  ????                     DMASEG  DW      ?               ;Buffer segment
+				. 
+ 0012  ????                     SECLENG DW      ?               ;Sector Length.
+				 
+ 0014  0006[                            DB      6 DUP (?)       ;8089 use only.
+				 
+            ??                  
+                         ]      
+                                
+ 001A                           SIOPB   ENDS 
+                                 
+ 032C  0004[                    IOPB    SIOPB   <,00H,0,0,0,0,0,0,000H,0,0,0,0,
+				> 
+            ??                  
+                         ]      
+ 0330  00                       
+ 0331  00                       
+ 0332  0000                     
+ 0334  00                       
+ 0335  00                       
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-24
+8089 Monitor structure.                                     
+
+ 0336  00                       
+ 0337  00                       
+ 0338  00                       
+ 0339  00                       
+ 033A  0000                     
+ 033C  0000                     
+ 033E  0000                     
+ 0340  0006[                    
+            ??                  
+                         ]      
+                                
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-25
+8089 Monitor structure.                                     
+
+                                        PAGE 
+                                        SUBTTL  Drive Tables. 
+                                 
+                                 
+                                ; 
+                                ; MSDOS drive initialization tables and other w
+				hat not. 
+                                ; 
+                                ;  Drive 0 is: 
+                                ;               Single sided, Single density, 7
+				7 track with 26 
+                                ;               128 byte sectors per track.  On
+				e sector for 
+                                ;               boot and header.  (256,128 byte
+				s free, old style). 
+                                ;       or 
+                                ;               Single sided, Single density, 7
+				7 track with 26 
+                                ;               128 byte sectors per track.  Fo
+				ur sectors for 
+                                ;               boot and header. (255,744 bytes
+				 free). 
+                                ;       or 
+                                ;               Single sided, Double Density, 7
+				5 track with 12 
+                                ;               512 byte sectors per track. 
+                                ;               (460,800 bytes) 
+                                ;               Two hidden single density track
+				s. 
+                                ; 
+                                 
+                                DBP     STRUC 
+                                 
+ 0000  0003[                    JMPNEAR DB      3 DUP (?)       ;Jmp Near xxxx 
+				 for boot. 
+            ??                  
+                         ]      
+                                
+ 0003  0008[                    NAMEVER DB      8 DUP (?)       ;Name / Version
+				 of OS. 
+            ??                  
+                         ]      
+                                
+                                 
+                                ;-------  Start of Drive Parameter Block. 
+                                 
+ 000B  ????                     SECSIZE DW      ?               ;Sector size in
+				 bytes.                  (dpb) 
+ 000D  ??                       ALLOC   DB      ?               ;Number of sect
+				ors per alloc. block.    (dpb) 
+ 000E  ????                     RESSEC  DW      ?               ;Reserved secto
+				rs.                      (dpb) 
+ 0010  ??                       FATS    DB      ?               ;Number of FAT'
+				s.                       (dpb) 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-26
+Drive Tables.                                               
+
+ 0011  ????                     MAXDIR  DW      ?               ;Number of root
+				 directory entries.      (dpb) 
+ 0013  ????                     SECTORS DW      ?               ;Number of sect
+				ors per diskette.        (dpb) 
+ 0015  ??                       MEDIAID DB      ?               ;Media byte ID.
+				                         (dpb) 
+ 0016  ????                     FATSEC  DW      ?               ;Number of FAT 
+				Sectors.                 (dpb) 
+                                 
+                                ;-------  End of Drive Parameter Block. 
+                                 
+ 0018  ????                     SECTRK  DW      ?               ;Number of Sect
+				ors per track. 
+ 001A                           DBP     ENDS 
+                                 
+ 0346  0003[                    LSDRIV1 DBP     <,,512,8,17,2,512,03ff0H,0FEH,6
+				,32> 
+            ??                  
+                         ]      
+ 0349  0008[                    
+            ??                  
+                         ]      
+ 0351  0200                     
+ 0353  08                       
+ 0354  0011                     
+ 0356  02                       
+ 0357  0200                     
+ 0359  3FF0                     
+ 035B  FE                       
+ 035C  0006                     
+ 035E  0020                     
+                                
+                                 
+ 0360  0003[                    LSDRIV2 DBP     <,,128,4,4,2,68,2002,0FDH,6,26>
+				 
+            ??                  
+                         ]      
+ 0363  0008[                    
+            ??                  
+                         ]      
+ 036B  0080                     
+ 036D  04                       
+ 036E  0004                     
+ 0370  02                       
+ 0371  0044                     
+ 0373  07D2                     
+ 0375  FD                       
+ 0376  0006                     
+ 0378  001A                     
+                                
+                                 
+ 037A  0003[                    LDDRIV1 DBP     <,,512,1,24,2,128,924,0F8H,3,12
+				> 
+            ??                  
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-27
+Drive Tables.                                               
+
+                         ]      
+ 037D  0008[                    
+            ??                  
+                         ]      
+ 0385  0200                     
+ 0387  01                       
+ 0388  0018                     
+ 038A  02                       
+ 038B  0080                     
+ 038D  039C                     
+ 038F  F8                       
+ 0390  0003                     
+ 0392  000C                     
+                                
+                                 
+ 0394  0003[                    LDDRIV2	DBP	    <,,1024,1,16,2,128,616,0F9H,1,8
+				> 
+            ??                  
+                         ]      
+ 0397  0008[                    
+            ??                  
+                         ]      
+ 039F  0400                     
+ 03A1  01                       
+ 03A2  0010                     
+ 03A4  02                       
+ 03A5  0080                     
+ 03A7  0268                     
+ 03A9  F9                       
+ 03AA  0001                     
+ 03AC  0008                     
+                                
+                                 
+ 03AE                           DSK_INIT: 
+ 03AE  33 C0                    		XOR     AX,AX 
+ 03B0  8A 44 15                 		MOV     AL,[SI.MEDIAID] 
+ 03B3  BE 03B9 R                        MOV     SI,OFFSET INITTAB 
+ 03B6  E9 044B R                        JMP     GET_BP5 
+                                 
+ 03B9                           INITTAB: 
+ 03B9  0351 R                           DW      LSDRIV1.SECSIZE 
+                                 
+ = 0041                         DSTAT   EQU     41H             ;1793 status po
+				rt. 
+ = 0043                         DTRACK  EQU     43H             ;1793 track por
+				t. 
+ = 0045                         DSECTOR EQU     45H             ;1793 sector po
+				rt. 
+ = 0047                         DDATA   EQU     47H             ;1793 data I/O 
+				port. 
+ = 0055                         DDENS   EQU     55H             ;Density select
+				 port. 
+ = 0004                         DDBIT	EQU	    04H		        ;Density select bit.
+				 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-28
+Drive Tables.                                               
+
+ = 0053                         DSELECT EQU     53H             ;Drive select p
+				ort. 
+ 03BB  00                       CURDRV  DB      0 
+ 03BC  00                       LASTDRV DB      0 
+ 03BD  0E 0D 0B 07              DRVTAB  DB      0EH,0DH,0BH,07H 
+ 03C1  00 01 02 03              TRKPT   DB      0,1,2,3 
+ 03C5  FF FF FF FF              TRKTAB  DB      -1,-1,-1,-1 
+ 03C9  00 00 00 00              PREDENS DB      0,0,0,0 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-29
+Drive Tables.                                               
+
+                                        PAGE 
+                                        SUBTTL  Media check routine 
+                                 
+                                ; 
+                                ; Media check routine. 
+                                ; On entry: 
+                                ;       AL = disk unit number. 
+                                ;       AH = media byte 
+                                ; On exit: 
+                                ; 
+                                ;       [MEDIA FLAG] = -1 (FF hex) if disk is c
+				hanged. 
+                                ;       [MEDIA FLAG] = 0 if don't know. 
+                                ;       [MEDIA FLAG] = 1 if not changed. 
+                                ; 
+                                ;       [MEDIA] = 0FEH for Standard single dens
+				ity. 
+                                ;       [MEDIA] = 0FDH for Altos single density
+				. 
+                                ;       [MEDIA] = 0F4H for Altos double density
+				. 
+                                ; 
+                                 
+                                MEDIAS  STRUC 
+ 0000  000D[                            DB      13 DUP(?)               ;Static
+				 request header. 
+            ??                  
+                         ]      
+                                
+ 000D  ??                       MEDIAS1 DB      ?                       ;Media 
+				byte. 
+ 000E  ??                       MEDIAS2 DB      ?                       ;Media 
+				status byte flag. 
+ 000F                           MEDIAS  ENDS 
+                                 
+ 03CD                           MEDIAC:  
+                                 
+ 03CD  B4 01                        MOV     AH,1           ; AH = 1, disk not c
+				hanged. 
+ 03CF  EB 04                    	JMP	    SHORT MEDIA1 
+                                 
+ 03D1  88 16 03C9 R             MEDIA1A:MOV	[PREDENS],DL	;Save last density use
+				d for read. 
+                                 
+ 03D5  C5 1E 0115 R             MEDIA1: LDS     BX,[PTRSAV]     ;Udate media se
+				ction of data block. 
+ 03D9  88 67 0E                         MOV     [BX.MEDIAS2],AH 
+ 03DC  C6 47 0D 01              		mov     [BX.MEDIAS1],1 
+ 03E0  B0 00                    		MOV	    AL,0 
+ 03E2  E9 01AB R                        JMP     EXIT 
+                                 
+ 03E5  E8 041A R                MEDIA2: CALL    MEDIA4          ;Unload head if
+				 selecting new drive. 
+ 03E8  B9 0002                          MOV     CX,2            ;Try each densi
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-30
+Media check routine                                         
+
+				ty once. 
+ 03EB  BB 03BD R                		MOV	    BX,OFFSET DRVTAB 
+ 03EE  D7                       		XLAT			;Convert from drive # to select code. 
+ 03EF  E6 53                            OUT     DSELECT,AL      ;Select disk 
+ 03F1  B4 00                    		MOV		AH,0		;Assume that we don't know. 
+ 03F3  8A 16 03C9 R             		MOV		DL,[PREDENS]	;Get last density. 
+ 03F7  80 E2 04                 		AND		DL,DDBIT	;Be sure only Density bit set/c
+				lr. 
+ 03FA  E4 55                    MEDIA3:	IN		AL,DDENS 
+ 03FC  24 FB                    		AND		AL,0FBH		;Clear density bit. 
+ 03FE  0A C2                    		OR		AL,DL		;Set/clear density bit. 
+ 0400  E6 55                    		OUT     DDENS,AL        ;Select density. 
+ 0402  B0 C4                            MOV     AL,0C4H         ;READ ADDRESS c
+				ommand 
+ 0404  E8 0430 R                        CALL    DCOM 
+ 0407  24 98                            AND     AL,98H 
+ 0409  E4 47                            IN      AL,DDATA        ;Eat last byte 
+				to reset DRQ 
+ 040B  74 C4                            JZ      MEDIA1A         ;Jump if no err
+				or in reading address. 
+ 040D  B4 FF                            MOV     AH,0FFH         ; AH = -1 (disk
+				 changed) if new density works. 
+ 040F  80 F2 04                         XOR     DL,DDBIT	;Flip density bit. 
+ 0412  E2 E6                            LOOP    MEDIA3 
+ 0414  B8 0002                          MOV     AX,2            ;Couldn't read 
+				disk at all, AH = 0 for don't 
+ 0417  E9 01A6 R                        JMP     ERR_EXIT        ;  know if disk
+				 changed, AL = error code 2 - 
+                                 
+ 041A  8A E0                    MEDIA4: MOV     AH,AL           ;Save disk driv
+				e number in AH. 
+ 041C  86 06 03BB R                     XCHG    AL,[CURDRV]     ;make new drive
+				 current, AL = previous 
+ 0420  3A C4                            CMP     AL,AH           ;Changing drive
+				s? 
+ 0422  74 0B                            JZ      MEDIA5          ;No, return to 
+				caller. 
+                                ; 
+                                ; If changing drives, unload head so the head l
+				oad delay one-shot 
+                                ; will fire again. Do it by seeking to same tra
+				ck with the H bit reset. 
+                                ; 
+ 0424  E4 43                            IN      AL,DTRACK       ;Get current tr
+				ack number 
+ 0426  E6 47                            OUT     DDATA,AL        ;Make it the tr
+				ack to seek to 
+ 0428  B0 10                            MOV     AL,10H          ;Seek and unloa
+				d head 
+ 042A  E8 0430 R                        CALL    DCOM 
+ 042D  8A C4                            MOV     AL,AH           ;Restore curren
+				t drive number 
+ 042F  C3                       MEDIA5: RET 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-31
+Media check routine                                         
+
+                                ; 
+                                ; Short routine to send a command to 1793 diske
+				tte controller chip and 
+                                ; wait for 1793 to complete the command. 
+                                ; 
+                                 
+ 0430  E6 41                    DCOM:   OUT     41H,AL          ;Send command t
+				o 1793. 
+ 0432  B9 0010                          MOV     CX,10H 
+ 0435  E2 FE                    DCOM1:  LOOP    DCOM1           ;Wait a short t
+				ime for 1793 to digest it. 
+                                 
+ 0437  E4 41                    DCOM2:  IN      AL,41H          ;Get 1793's sta
+				tus. 
+ 0439  24 01                            AND     AL,1            ;See if busy. 
+ 043B  75 FA                            JNZ     DCOM2           ;Yes, keep chec
+				king. 
+ 043D  E4 41                            IN      AL,41H          ;Get 1793's sta
+				tus for return 
+ 043F  C3                               RET 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-32
+Media check routine                                         
+
+                                        PAGE 
+                                        SUBTTL  Build and return Bios Parameter
+				 Block for a diskette. 
+                                 
+                                ; 
+                                ; Build Bios Parameter Blocks. 
+                                ; 
+                                ;       On entry:  ES:DI contains the address o
+				f a scratch sector buffer. 
+                                ;                  AL = Unit number. 
+                                ;                  AH = Current media byte. 
+                                ; 
+                                ;       On exit:   Return a DWORD pointer to th
+				e associated BPB 
+                                ;                  in the Request packet. 
+                                ; 
+                                 
+                                BPBS    STRUC 
+ 0000  000D[                            DB      13 DUP(?)               ;Static
+				 request header. 
+            ??                  
+                         ]      
+                                
+ 000D  ??                       BPB1    DB      ?                       ;Media 
+				byte. 
+ 000E  ????                     BPB2    DW      ?                       ;DWORD 
+				transfer address. 
+ 0010  ????                             DW      ? 
+ 0012  ????                     BPB3    DW      ?                       ;DWORD 
+				pointer to BPB 
+ 0014  ????                             DW      ? 
+ 0016                           BPBS    ENDS 
+                                 
+ 0440                           GET_BPB: 
+ 0440  32 E4                    		XOR AH,AH 
+ 0442                           GET_BP1: 
+                                 
+ 0442  BE 0346 R                GET_BP3:MOV     SI,OFFSET LSDRIV1 ;No compares 
+				- it's a 720kb diskette img 
+                                 
+ 0445  8A 44 15                 GET_BP4:MOV     AL,[SI.MEDIAID] 
+ 0448  83 C6 0B                         ADD     SI,11           ;Convert to DPB
+				 pointer 
+                                 
+ 044B  C5 1E 0115 R             GET_BP5:LDS     BX,[PTRSAV]     ;Update I/O dat
+				a packet. Called from init... 
+ 044F  88 47 0D                         MOV     [BX.BPB1],AL    ;Media byte. 
+ 0452  89 77 12                         MOV     [BX.BPB3],SI    ;DPB pointer. 
+ 0455  8C 4F 14                         MOV     [BX.BPB3+2],CS  ;Code segment. 
+ 0458  0A E4                    	    OR	    AH,AH 
+ 045A  75 05                    	    JNZ	    GET_BP6 
+ 045C  B0 00                    	    MOV	    AL,0 
+ 045E  E9 01AB R                	    JMP     EXIT 
+ 0461  B8 0007                  GET_BP6:MOV	AX,7 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-33
+Build and return Bios Parameter Block for a diskette.       
+
+ 0464  E9 01A6 R                	JMP	ERR_EXIT 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-34
+Build and return Bios Parameter Block for a diskette.       
+
+                                        PAGE 
+                                 
+                                        SUBTTL  Disk I/O equates. 
+                                 
+                                ;       Floppy drives 
+                                 
+                                ;      -------------------------- 
+                                ;         Hardware command def. 
+                                ;      -------------------------- 
+                                ; 
+                                ;            Read command    = 88 hex. 
+                                ;            Write command   = A8 hex. 
+                                ;            Format command  = F0 hex. 
+                                ;            Seek command    = 1E hex. 
+                                ;            Recal command   = 0A hex. 
+                                ;            Set DD mode     = 80 hex. 
+                                ; 
+                                ;      -------------------------- 
+                                ;        Status bits: 
+                                ;      -------------------------- 
+                                ; 
+                                ;            Busy            = 01 hex. 
+                                ;            (not used)      = 02 hex. 
+                                ;               TK0(seek)    = 04 hex. 
+                                ;               Lost Data    = 04 hex. 
+                                ;            CRC error       = 08 hex. 
+                                ;               Seek error   = 10 hex. 
+                                ;               Not found    = 10 hex. 
+                                ;            Write fault     = 20 hex. 
+                                ;            Write protect   = 40 hex. 
+                                ;            Not ready       = 80 hex. 
+                                ; 
+                                ;      -------------------------- 
+                                 
+ = 0088                         F_READ  EQU     088H            ;Floppy read co
+				mmand. 
+ = 00A8                         F_WRIT  EQU     0A8H            ;Floppy write c
+				ommand. 
+ = 00F0                         F_FMT   EQU     0F0H            ;Floppy format 
+				command. 
+ = 001E                         F_SEEK  EQU     01EH            ;Floppy seek co
+				mmand. 
+ = 000A                         F_RECAL EQU     00AH            ;Floppy recal. 
+				command. 
+ = 0080                         F_DD    EQU     080H            ;Set Drive doub
+				le density bit. 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-35
+Disk I/O equates.                                           
+
+                                        PAGE 
+                                        SUBTTL  MSDOS 2.x Disk I/O drivers. 
+                                 
+                                ; 
+                                ; Disk READ/WRITE functions. 
+                                ; 
+                                ; On entry: 
+                                ;       AL = Disk I/O driver number 
+                                ;       AH = Media byte. 
+                                ;       ES = Disk transfer segment. 
+                                ;       DI = Disk transfer offset in ES. 
+                                ;       CX = Number of sectors to transfer 
+                                ;       DX = Logical starting sector. 
+                                ; 
+                                ; On exit: 
+                                ;       Normal exit through common exit routine
+				. 
+                                ; 
+                                ;       Abnormal exit through common error rout
+				ine. 
+                                ; 
+                                 
+                                ;RETURNS  
+                                 
+ 0467                           POSITION_DISK:                      ;RETURNS TR
+				ACK IN AL, SECTOR IN AH. 
+ 0467  53                       	push    bx 
+ 0468  52                       	push    dx 
+ 0469  8B C2                    	MOV 	AX,DX   ;v20mbc 
+ 046B  BB 0020                  	MOV     Bx,32 
+ 046E  33 D2                    	xor     dx,dx 
+ 0470  F7 F3                    	DIV 	Bx 
+ 0472  8B D8                    	MOV     BX,AX      ;bh - sector, bl - track 
+ 0474  B0 0B                    	MOV     AL,0Bh     ;Sector 
+ 0476  E6 01                    	OUT     01H,AL 
+ 0478  8A C2                    	MOV     AL,DL 
+ 047A  E6 00                    	OUT	    00H,AL 
+ 047C  B0 0A                    	MOV     AL, 0AH  ;Track IS TWO BYTES, lsb FIRS
+				T 
+ 047E  E6 01                    	OUT     01H, Al 
+ 0480  8A C3                    	MOV     al,bl 
+ 0482  E6 00                    	OUT 	00H,AL 
+ 0484  8A C7                    	MOV     al, bh 
+ 0486  E6 00                    	OUT     00H, AL 
+ 0488  5A                       	pop     dx 
+ 0489  5B                       	pop     bx	 
+ 048A  C3                       	RET 
+                                 
+ 048B                           DSK_RED: 
+ 048B  8B D8                    	MOV 	BX,AX 
+ 048D  B0 09                    	MOV 	AL,09H 
+ 048F  E6 01                    	OUT 	01H,AL 
+ 0491  A0 03BB R                	MOV 	AL,[CURDRV] 
+ 0494  E6 00                    	OUT 	00H,AL 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-36
+MSDOS 2.x Disk I/O drivers.                                 
+
+ 0496  E8 0467 R                	CALL 	POSITION_DISK 
+ 0499  0B C9                    	OR 		CX,CX 
+ 049B  74 52                    	JZ 		E_DRW 
+ 049D  B0 86                    	MOV 	AL,086H      ;READ SECTOR 
+ 049F  E6 01                    	OUT 	01H,AL	 
+ 04A1  BB 0200                  	MOV 	BX,512 
+                                 
+ 04A4                           DSK_SR:   	 
+ 04A4  E4 00                    	IN 		AL,00H 
+ 04A6  26: 88 05                	MOV 	ES:[DI],AL 
+ 04A9  47                       	INC 	DI 
+ 04AA  4B                       	DEC 	BX 
+ 04AB  75 F7                    	JNZ 	DSK_SR	 
+ 04AD  49                       	DEC 	CX 
+ 04AE  74 3F                    	JZ 		E_DRW         ;DONE 
+ 04B0  42                       	INC 	DX 
+ 04B1  E8 0467 R                	CALL 	POSITION_DISK 
+ 04B4  B0 86                    	MOV 	AL,086H      ;READ SECTOR 
+ 04B6  E6 01                    	OUT 	01H,AL 
+ 04B8  BB 0200                  	MOV 	BX,512	 
+ 04BB  EB E7                    	JMP 	DSK_SR 
+                                 
+ 04BD                           DSK_WRV: 
+ 04BD                           DSK_WRT: 
+ 04BD  8B D8                    	MOV     BX,AX 
+ 04BF  B0 09                    	MOV 	AL,09H 
+ 04C1  E6 01                    	OUT     01H,AL 
+ 04C3  A0 03BB R                	MOV     AL,[CURDRV] 
+ 04C6  E6 00                    	OUT     00H,AL 
+ 04C8  E8 0467 R                	CALL    POSITION_DISK 
+ 04CB  0B C9                    	OR 	     CX,CX 
+ 04CD  74 20                    	JZ      E_DRW 
+ 04CF  B0 0C                    	MOV 	AL,0CH      ;READ SECTOR 
+ 04D1  E6 01                    	OUT 	01H,AL 
+ 04D3  BB 0200                      MOV 	BX,512      
+ 04D6                           DSK_SW:	 
+ 04D6  26: 8A 05                   	MOV 	AL,ES:[DI] 
+ 04D9  E6 00                    	OUT 	00H,AL 
+ 04DB  47                       	INC 	DI 
+ 04DC  4B                       	DEC 	BX 
+ 04DD  75 F7                    	JNZ 	DSK_SW	 
+ 04DF  49                       	DEC 	CX 
+ 04E0  74 0D                    	JZ 		E_DRW         ;DONE 
+ 04E2  42                       	INC 	DX 
+ 04E3  E8 0467 R                	CALL 	POSITION_DISK 
+ 04E6  B0 0C                    	MOV 	AL,0CH      ;READ SECTOR 
+ 04E8  E6 01                    	OUT 	01H,AL 
+ 04EA  BB 0200                      MOV 	BX,512 
+ 04ED  EB E7                    	JMP 	DSK_SW 
+ 04EF                           E_DRW: 
+ 04EF  E9 01AB R                	JMP 	EXIT	 
+                                	 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-37
+MSDOS 2.x Disk I/O drivers.                                 
+
+                                        PAGE 
+                                        SUBTTL  Disk Error processing. 
+                                 
+                                ; 
+                                ; Disk error routine. 
+                                ; 
+                                 
+ 04F2  2E: C5 1E 0115 R         DERROR: LDS     BX,CS:[PTRSAV] 
+ 04F7  C7 47 12 0000                    MOV     [BX.COUNT],0 
+ 04FC  0E                               PUSH    CS 
+ 04FD  1F                               POP     DS 
+                                 
+ 04FE  B3 FF                            MOV     BL,-1 
+ 0500  8A E0                            MOV     AH,AL 
+ 0502  B7 0E                            MOV     BH,14           ;Lenght of tabl
+				e. 
+ 0504  BE 0518 R                        MOV     SI,OFFSET DERRTAB 
+ 0507  FE C3                    DERROR2:INC     BL              ;Increment to n
+				ext error code. 
+ 0509  2E: AC                           LODS    BYTE PTR CS:[SI] 
+ 050B  3A E0                            CMP     AH,AL           ;See if error c
+				ode matches disk status. 
+ 050D  74 06                            JZ      DERROR3         ;Got the right 
+				error, exit. 
+ 050F  FE CF                            DEC     BH 
+ 0511  75 F4                            JNZ     DERROR2         ;Keep checking 
+				table. 
+ 0513  B3 0C                            MOV     BL,12           ;Set general ty
+				pe of error. 
+ 0515  8A C3                    DERROR3:MOV     AL,BL           ;Now we've got 
+				the code. 
+ 0517  C3                               RET 
+                                 
+ 0518  40                       DERRTAB DB      40H             ; 0. Write prot
+				ect error 
+ 0519  00                               DB      00H             ; 1. Unknown un
+				it. 
+ 051A  80                               DB      80H             ; 2. Not ready 
+				error. 
+ 051B  FF                               DB      0FFH            ; 3. Unknown co
+				mmand. 
+ 051C  08                               DB      08H             ; 4. CRC error 
+ 051D  00                               DB      00H             ; 5. Bad drive 
+				request. 
+ 051E  02                               DB      02H             ; 6. Seek error
+				 
+ 051F  00                               DB      00H             ; 7. Unknown me
+				dia. 
+ 0520  10                               DB      10H             ; 8. Sector not
+				 found 
+ 0521  00                               DB      00H             ; 9. (Not used.
+				) 
+ 0522  20                               DB      20H             ;10. Write faul
+				t. 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-38
+Disk Error processing.                                      
+
+ 0523  04                               DB      04H             ;11. Read fault
+				. 
+ 0524  07                               DB      07H             ;12. General ty
+				pe of failure. 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-39
+Disk Error processing.                                      
+
+                                        PAGE 
+                                        SUBTTL  Common ROM call routine. 
+                                 
+                                 
+                                ;dumb, but needed for re_init far return..... 
+ 0525                           _jnk proc far	 
+ 0525  0B C0                    	OR ax,ax 
+                                	 
+ 0527                           RE_INIT: 
+ 0527  8C D8                    		mov ax,ds 
+ 0529  33 DB                    		XOR BX,BX 
+ 052B  8E DB                    		MOV DS,BX 
+ 052D  BB 008A                  		MOV BX,SYSTICK 
+ 0530  C7 07 02A8 R             		MOV [DS:BX], OFFSET TIMER_INT 
+ 0534  43                       		INC BX 
+ 0535  43                       		INC BX 
+ 0536  B9 00C0                  		MOV CX, BIOSSEG 
+ 0539  89 0F                    		MOV [DS:BX],CX 
+ 053B  FA                       		CLI 
+                                		;MOV AL,2 
+                                		;OUT 01H,AL 
+                                		;MOV AL,2   ;write to interrupt register 
+                                		;OUT 00H,AL 
+ 053C  FB                       		STI 
+ 053D  8E D8                    		mov ds,ax 
+ 053F  CB                       	    RET 
+                                _jnk endp 
+                                 
+                                PUBLIC RE_INIT; 
+                                ; 
+                                ;  Save all registers except CX, BX and AX. 
+                                 
+ 0540  00 00 00 FE              ROMRTN  DD      0FE000000H      ;Main ROM entry
+				 point. 
+                                 
+ 0544                           ROM_CALL: 
+ 0544  C3                               RET 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-40
+Common ROM call routine.                                    
+
+                                        PAGE 
+                                        SUBTTL  Initalization code and temporar
+				y work areas. 
+                                 
+                                ; 
+                                ; Overlayed by MSDOS by SYSINIT. 
+                                ; 
+                                 
+ 0545                           WRKSTK  LABEL   WORD 
+ 0545  0064[                            DB      100 DUP (?) 
+            ??                  
+                         ]      
+                                
+                                 
+                                 
+ 05A9  33 ED                    HWINIT: XOR     BP,BP 
+ 05AB  8E D5                            MOV     SS,BP 
+ 05AD  BC 05A7 R                        MOV     SP,OFFSET WRKSTK+98     ;Some n
+				ice area for stack. 
+                                 
+ 05B0  0E                               PUSH    CS 
+ 05B1  07                               POP     ES 
+                                 
+ 05B2  BB 000A                          MOV     BX,ROM_INIT 
+ 05B5  E8 0544 R                        CALL    ROM_CALL 
+ 05B8  B4 00                    		MOV     AH,0 
+ 05BA  A3 01BF R                        MOV     MCON,AX 
+ 05BD  B0 01                    		MOV     AL,01H 
+ 05BF  E6 01                    		OUT     01h,al 
+ 05C1  B0 21                    		mov     al,33 
+ 05C3  E6 00                    		out     00h,al 
+ 05C5  B8 ---- E                        MOV     AX,SEG SYSINIT 
+ 05C8  8E D8                            MOV     DS,AX 
+                                 
+                                ASSUME  DS:SEG SYSINIT 
+                                 
+ 05CA  8C C8                            MOV     AX,CS 
+ 05CC  05 0100                          ADD     AX,BIOSIZS 
+ 05CF  A3 0000 E                        MOV     DS:[CURRENT_DOS_LOCATION],AX 
+ 05D2  C7 06 0000 E F000                MOV     DS:[MEMORY_SIZE],MAX_MEM 
+ 05D8  8C C8                            MOV     AX,CS 
+ 05DA  A3 0002 E                        MOV     WORD PTR DS:[DEVICE_LIST+2],AX 
+ 05DD  C7 06 0000 E 0003 R              MOV     WORD PTR DS:[DEVICE_LIST],OFFSE
+				T DEVSTART 
+ 05E3  8C C8                            MOV     AX,CS 
+ 05E5  05 0057                          ADD     AX,((OFFSET WRKSTK - OFFSET INI
+				T)+50) /16 
+ 05E8  A3 0000 E                        MOV     DS:[FINAL_DOS_LOCATION],AX 
+ 05EB  EA 0000 ---- E                   JMP     SYSINIT 
+                                 
+ 05F0                           DOSSPOT LABEL   WORD 
+                                 
+ 05F0                           CODE    ENDS 
+                                 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Page     1-41
+Initalization code and temporary work areas.                
+
+                                        END 
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Symbols-1
+                                                             
+
+Structures and Records:
+
+                N a m e                 Width   # fields
+                                        Shift   Width   Mask    Initial
+
+BPBS . . . . . . . . . . . . . .  	0016	0006
+  BPB1 . . . . . . . . . . . . .  	000D
+  BPB2 . . . . . . . . . . . . .  	000E
+  BPB3 . . . . . . . . . . . . .  	0012
+DBP  . . . . . . . . . . . . . .  	001A	000B
+  JMPNEAR  . . . . . . . . . . .  	0000
+  NAMEVER  . . . . . . . . . . .  	0003
+  SECSIZE  . . . . . . . . . . .  	000B
+  ALLOC  . . . . . . . . . . . .  	000D
+  RESSEC . . . . . . . . . . . .  	000E
+  FATS . . . . . . . . . . . . .  	0010
+  MAXDIR . . . . . . . . . . . .  	0011
+  SECTORS  . . . . . . . . . . .  	0013
+  MEDIAID  . . . . . . . . . . .  	0015
+  FATSEC . . . . . . . . . . . .  	0016
+  SECTRK . . . . . . . . . . . .  	0018
+IODAT  . . . . . . . . . . . . .  	0016	0009
+  CMDLEN . . . . . . . . . . . .  	0000
+  UNIT . . . . . . . . . . . . .  	0001
+  CMD  . . . . . . . . . . . . .  	0002
+  STATUS . . . . . . . . . . . .  	0003
+  MEDIA  . . . . . . . . . . . .  	000D
+  TRANS  . . . . . . . . . . . .  	000E
+  COUNT  . . . . . . . . . . . .  	0012
+  START  . . . . . . . . . . . .  	0014
+MEDIAS . . . . . . . . . . . . .  	000F	0003
+  MEDIAS1  . . . . . . . . . . .  	000D
+  MEDIAS2  . . . . . . . . . . .  	000E
+SIOPB  . . . . . . . . . . . . .  	001A	000E
+  OPCODE . . . . . . . . . . . .  	0004
+  DRIVE  . . . . . . . . . . . .  	0005
+  TRACK  . . . . . . . . . . . .  	0006
+  HEAD . . . . . . . . . . . . .  	0008
+  SECTOR . . . . . . . . . . . .  	0009
+  SCOUNT . . . . . . . . . . . .  	000A
+  RETCODE  . . . . . . . . . . .  	000B
+  RETMASK  . . . . . . . . . . .  	000C
+  RETRIES  . . . . . . . . . . .  	000D
+  DMAOFF . . . . . . . . . . . .  	000E
+  DMASEG . . . . . . . . . . . .  	0010
+  SECLENG  . . . . . . . . . . .  	0012
+
+Segments and Groups:
+
+                N a m e         	Size	Align	Combine Class
+
+CODE . . . . . . . . . . . . . .  	05F0	PARA	NONE	
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Symbols-2
+                                                             
+
+Symbols:            
+
+                N a m e         	Type	Value	Attr         
+
+ACON . . . . . . . . . . . . . .  	L WORD 	01C3	CODE
+AIN  . . . . . . . . . . . . . .  	L NEAR	025F	CODE
+AISTA9 . . . . . . . . . . . . .  	L NEAR	025B	CODE
+AISTAT . . . . . . . . . . . . .  	L NEAR	023C	CODE
+ANSI . . . . . . . . . . . . . .  	Number	0000	
+AOUT . . . . . . . . . . . . . .  	L NEAR	026A	CODE
+AUXCHAR  . . . . . . . . . . . .  	L BYTE 	023B	CODE
+AUXDEV . . . . . . . . . . . . .  	L NEAR	0015	CODE
+AUXTBL . . . . . . . . . . . . .  	L NEAR	00C7	CODE
+AUX_CLR  . . . . . . . . . . . .  	L NEAR	028B	CODE
+AUX_INT  . . . . . . . . . . . .  	L NEAR	0130	CODE
+AUX_RDN2 . . . . . . . . . . . .  	L NEAR	027F	CODE
+AUX_RDND . . . . . . . . . . . .  	L NEAR	0277	CODE
+AUX_READ . . . . . . . . . . . .  	L NEAR	0282	CODE
+AUX_WRI1 . . . . . . . . . . . .  	L NEAR	0298	CODE
+AUX_WRIT . . . . . . . . . . . .  	L NEAR	0296	CODE
+AUX_WRST . . . . . . . . . . . .  	L NEAR	0293	CODE
+
+BADCOUNTRY . . . . . . . . . . .  	L BYTE 	0119	CODE	Global
+BADLD_POST . . . . . . . . . . .  	L BYTE 	011A	CODE	Global
+BADLD_PRE  . . . . . . . . . . .  	L BYTE 	011C	CODE	Global
+BADSIZ_POST  . . . . . . . . . .  	L BYTE 	011B	CODE	Global
+BADSIZ_PRE . . . . . . . . . . .  	L BYTE 	011D	CODE	Global
+BIOSIZ . . . . . . . . . . . . .  	Number	1000	
+BIOSIZS  . . . . . . . . . . . .  	Number	0100	
+BIOSSEG  . . . . . . . . . . . .  	Number	00C0	
+BUFFERS  . . . . . . . . . . . .  	V BYTE 	0000		External
+BUS_EXIT . . . . . . . . . . . .  	L NEAR	01A0	CODE
+
+CHAR . . . . . . . . . . . . . .  	L BYTE 	01C5	CODE
+CINP . . . . . . . . . . . . . .  	L NEAR	01DF	CODE
+CISTA1 . . . . . . . . . . . . .  	L NEAR	01CE	CODE
+CISTA9 . . . . . . . . . . . . .  	L NEAR	01DD	CODE
+CISTAT . . . . . . . . . . . . .  	L NEAR	01C6	CODE
+CMDERR . . . . . . . . . . . . .  	L NEAR	01A4	CODE
+CONDEV . . . . . . . . . . . . .  	L NEAR	0003	CODE
+CONTBL . . . . . . . . . . . . .  	L NEAR	00AD	CODE
+CON_FLSH . . . . . . . . . . . .  	L NEAR	0203	CODE
+CON_INT  . . . . . . . . . . . .  	L NEAR	0129	CODE
+CON_RDN1 . . . . . . . . . . . .  	L NEAR	01EF	CODE
+CON_RDN2 . . . . . . . . . . . .  	L NEAR	01F9	CODE
+CON_RDND . . . . . . . . . . . .  	L NEAR	01EA	CODE
+CON_READ . . . . . . . . . . . .  	L NEAR	01FB	CODE
+CON_WRI1 . . . . . . . . . . . .  	L NEAR	020E	CODE
+CON_WRIT . . . . . . . . . . . .  	L NEAR	020C	CODE
+CON_WRST . . . . . . . . . . . .  	L NEAR	020A	CODE
+CURDRV . . . . . . . . . . . . .  	L BYTE 	03BB	CODE
+CURRENT_DOS_LOCATION . . . . . .  	V WORD 	0000		External
+
+DCOM . . . . . . . . . . . . . .  	L NEAR	0430	CODE
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Symbols-3
+                                                             
+
+DCOM1  . . . . . . . . . . . . .  	L NEAR	0435	CODE
+DCOM2  . . . . . . . . . . . . .  	L NEAR	0437	CODE
+DDATA  . . . . . . . . . . . . .  	Number	0047	
+DDBIT  . . . . . . . . . . . . .  	Number	0004	
+DDENS  . . . . . . . . . . . . .  	Number	0055	
+DEFAULT_DRIVE  . . . . . . . . .  	V BYTE 	0000		External
+DERROR . . . . . . . . . . . . .  	L NEAR	04F2	CODE
+DERROR2  . . . . . . . . . . . .  	L NEAR	0507	CODE
+DERROR3  . . . . . . . . . . . .  	L NEAR	0515	CODE
+DERRTAB  . . . . . . . . . . . .  	L BYTE 	0518	CODE
+DEVICE_LIST  . . . . . . . . . .  	V DWORD	0000		External
+DEVSTART . . . . . . . . . . . .  	L WORD 	0003	CODE
+DOSSPOT  . . . . . . . . . . . .  	L WORD 	05F0	CODE
+DRVTAB . . . . . . . . . . . . .  	L BYTE 	03BD	CODE
+DSECTOR  . . . . . . . . . . . .  	Number	0045	
+DSELECT  . . . . . . . . . . . .  	Number	0053	
+DSK0DEV  . . . . . . . . . . . .  	L NEAR	004B	CODE
+DSK0_INT . . . . . . . . . . . .  	L NEAR	0143	CODE
+DSK1DEV  . . . . . . . . . . . .  	L NEAR	005D	CODE
+DSK1_INT . . . . . . . . . . . .  	L NEAR	014F	CODE
+DSK2DEV  . . . . . . . . . . . .  	L NEAR	006F	CODE
+DSK2_INT . . . . . . . . . . . .  	L NEAR	015B	CODE
+DSK3DEV  . . . . . . . . . . . .  	L NEAR	0081	CODE
+DSK3_INT . . . . . . . . . . . .  	L NEAR	0167	CODE
+DSKTBL . . . . . . . . . . . . .  	L NEAR	0093	CODE
+DSK_INIT . . . . . . . . . . . .  	L NEAR	03AE	CODE
+DSK_RED  . . . . . . . . . . . .  	L NEAR	048B	CODE
+DSK_SR . . . . . . . . . . . . .  	L NEAR	04A4	CODE
+DSK_SW . . . . . . . . . . . . .  	L NEAR	04D6	CODE
+DSK_WRT  . . . . . . . . . . . .  	L NEAR	04BD	CODE
+DSK_WRV  . . . . . . . . . . . .  	L NEAR	04BD	CODE
+DSTAT  . . . . . . . . . . . . .  	Number	0041	
+DTRACK . . . . . . . . . . . . .  	Number	0043	
+
+ENTRY  . . . . . . . . . . . . .  	L NEAR	0171	CODE
+ERR_EXIT . . . . . . . . . . . .  	L NEAR	01A6	CODE
+EXIT . . . . . . . . . . . . . .  	L NEAR	01AB	CODE
+EXIT1  . . . . . . . . . . . . .  	L NEAR	01AD	CODE
+EXITP  . . . . . . . . . . . . .  	F PROC	01AB	CODE	Length = 0014
+E_DRW  . . . . . . . . . . . . .  	L NEAR	04EF	CODE
+
+FINAL_DOS_LOCATION . . . . . . .  	V WORD 	0000		External
+F_DD . . . . . . . . . . . . . .  	Number	0080	
+F_FMT  . . . . . . . . . . . . .  	Number	00F0	
+F_READ . . . . . . . . . . . . .  	Number	0088	
+F_RECAL  . . . . . . . . . . . .  	Number	000A	
+F_SEEK . . . . . . . . . . . . .  	Number	001E	
+F_WRIT . . . . . . . . . . . . .  	Number	00A8	
+
+GET_BP1  . . . . . . . . . . . .  	L NEAR	0442	CODE
+GET_BP3  . . . . . . . . . . . .  	L NEAR	0442	CODE
+GET_BP4  . . . . . . . . . . . .  	L NEAR	0445	CODE
+GET_BP5  . . . . . . . . . . . .  	L NEAR	044B	CODE
+GET_BP6  . . . . . . . . . . . .  	L NEAR	0461	CODE
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Symbols-4
+                                                             
+
+GET_BPB  . . . . . . . . . . . .  	L NEAR	0440	CODE
+
+HWINIT . . . . . . . . . . . . .  	L NEAR	05A9	CODE
+
+INIT . . . . . . . . . . . . . .  	L NEAR	0000	CODE
+INITTAB  . . . . . . . . . . . .  	L NEAR	03B9	CODE
+IOPB . . . . . . . . . . . . . .  	L 001A	032C	CODE
+
+LASTDRV  . . . . . . . . . . . .  	L BYTE 	03BC	CODE
+LDDRIV1  . . . . . . . . . . . .  	L 001A	037A	CODE
+LDDRIV2  . . . . . . . . . . . .  	L 001A	0394	CODE
+LSDRIV1  . . . . . . . . . . . .  	L 001A	0346	CODE
+LSDRIV2  . . . . . . . . . . . .  	L 001A	0360	CODE
+
+MAX_MEM  . . . . . . . . . . . .  	Number	F000	
+MCON . . . . . . . . . . . . . .  	L WORD 	01BF	CODE
+MEDIA1 . . . . . . . . . . . . .  	L NEAR	03D5	CODE
+MEDIA1A  . . . . . . . . . . . .  	L NEAR	03D1	CODE
+MEDIA2 . . . . . . . . . . . . .  	L NEAR	03E5	CODE
+MEDIA3 . . . . . . . . . . . . .  	L NEAR	03FA	CODE
+MEDIA4 . . . . . . . . . . . . .  	L NEAR	041A	CODE
+MEDIA5 . . . . . . . . . . . . .  	L NEAR	042F	CODE
+MEDIAC . . . . . . . . . . . . .  	L NEAR	03CD	CODE
+MEMORY_SIZE  . . . . . . . . . .  	V WORD 	0000		External
+
+OUTCHR . . . . . . . . . . . . .  	L NEAR	0219	CODE
+
+PCON . . . . . . . . . . . . . .  	L WORD 	01C1	CODE
+POSITION_DISK  . . . . . . . . .  	L NEAR	0467	CODE
+PREDENS  . . . . . . . . . . . .  	L BYTE 	03C9	CODE
+PRNDEV . . . . . . . . . . . . .  	L NEAR	0027	CODE
+PRNTBL . . . . . . . . . . . . .  	L NEAR	00FB	CODE
+PRN_INT  . . . . . . . . . . . .  	L NEAR	0137	CODE
+PRN_STA  . . . . . . . . . . . .  	L NEAR	0224	CODE
+PRN_WR1  . . . . . . . . . . . .  	L NEAR	0228	CODE
+PRN_WRT  . . . . . . . . . . . .  	L NEAR	0226	CODE
+PTRSAV . . . . . . . . . . . . .  	L DWORD	0115	CODE
+
+QSIZE  . . . . . . . . . . . . .  	Number	0064	
+
+RE_INIT  . . . . . . . . . . . .  	L NEAR	0527	CODE	Global
+ROMRTN . . . . . . . . . . . . .  	L DWORD	0540	CODE
+ROM_CALL . . . . . . . . . . . .  	L NEAR	0544	CODE
+ROM_CONIN  . . . . . . . . . . .  	Number	0002	
+ROM_CONOUT . . . . . . . . . . .  	Number	0003	
+ROM_CONSTA . . . . . . . . . . .  	Number	0001	
+ROM_DISKIO . . . . . . . . . . .  	Number	0008	
+ROM_INIT . . . . . . . . . . . .  	Number	000A	
+ROM_PMSG . . . . . . . . . . . .  	Number	0007	
+
+STRATEGY . . . . . . . . . . . .  	L NEAR	011E	CODE
+STRATP . . . . . . . . . . . . .  	F PROC	011E	CODE	Length = 000B
+SYSINIT  . . . . . . . . . . . .  	L FAR 	0000		External
+SYSRX  . . . . . . . . . . . . .  	Number	0086	
+Microsoft (R) Macro Assembler  Version 4.00                 2/1/23 08:40:42
+ 
+IO.SYS for the ALTOS ACS-86C.                               Symbols-5
+                                                             
+
+SYSTICK  . . . . . . . . . . . .  	Number	008A	
+
+TIMDEV . . . . . . . . . . . . .  	L NEAR	0039	CODE
+TIMER_INT  . . . . . . . . . . .  	L NEAR	02A8	CODE
+TIMTBL . . . . . . . . . . . . .  	L NEAR	00E1	CODE
+TIM_DAYS . . . . . . . . . . . .  	L NEAR	02A2	CODE
+TIM_HRS  . . . . . . . . . . . .  	L NEAR	02A5	CODE
+TIM_HSEC . . . . . . . . . . . .  	L NEAR	02A6	CODE
+TIM_INIT . . . . . . . . . . . .  	L NEAR	0303	CODE
+TIM_INT  . . . . . . . . . . . .  	L NEAR	013D	CODE
+TIM_MINS . . . . . . . . . . . .  	L NEAR	02A4	CODE
+TIM_NC . . . . . . . . . . . . .  	L NEAR	02FE	CODE
+TIM_RED  . . . . . . . . . . . .  	L NEAR	031D	CODE
+TIM_SECS . . . . . . . . . . . .  	L NEAR	02A7	CODE
+TIM_WRT  . . . . . . . . . . . .  	L NEAR	0306	CODE
+TRKPT  . . . . . . . . . . . . .  	L BYTE 	03C1	CODE
+TRKTAB . . . . . . . . . . . . .  	L BYTE 	03C5	CODE
+
+WRKSTK . . . . . . . . . . . . .  	L WORD 	0545	CODE
+
+_JNK . . . . . . . . . . . . . .  	F PROC	0525	CODE	Length = 001B
+
+
+   1229 Source  Lines
+   1229 Total   Lines
+    224 Symbols
+
+  39582 Bytes symbol space free
+
+      0 Warning Errors
+      0 Severe  Errors
