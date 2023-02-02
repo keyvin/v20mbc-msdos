@@ -1,5 +1,5 @@
 # MSDOS 2.11 adapted for the Just for Fun v20mbc
-** Requires 512KB
+** Requires 1024KB
 
 ![My Image](pic.PNG)
 
@@ -11,7 +11,17 @@ Want to just run it and not build it? See rdy2run directory
 
 Hardware and firmware:
 
-https://j4f.info/v20-mbc
+This version requires J4F's EDITED beta IOS
+https://github.com/SuperFabius/A250220_DEVEL
+
+EDIT line 214 and 215 to the following:
+#define   SERIALRXIRQ_VECTOR    0x40         
+#define   SYSTICKIRQ_VECTOR     0x41             
+
+
+
+MAKE SURE IOS IS USING 0x40 and 0x41 FOR INTERRUPT VECTORS
+
 
 Set up for building on win32, can build on other platforms
 Just need an assembler. 
@@ -62,7 +72,7 @@ If you change the boot block definition, you will need to alter seltrack to acco
 * AT PROMPT SEGMENT NEEDED ENTER YOUR BIOS SEGMENT (00C0)*
  
 ## Run image
-copy autoboot.bin and ds00n00.dsk & ds01n00.dsk to v20mbc 	
+copy ds2n00.dsk to SD card. 
 Follow directions in rdy2run
 
 ## Adding software##
@@ -70,4 +80,5 @@ Follow directions in rdy2run
 mount the disk image in dosbox-x:
 	imgmount f ds1n00.dsk -t hdd -fs fat
 
+There is now support for four disks (a, b, c, d) drives
 You can now copy files to the image. Close dosbox-x and recopy to SD. 
