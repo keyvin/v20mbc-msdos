@@ -1,7 +1,7 @@
 # MSDOS 2.11 adapted for the Just for Fun v20mbc
 ** Requires 1024KB
 
-![My Image](beta.PNG)
+![My Image](beta.png)
 
 IMPORTANT: The files in this repository are under a variety of licenses. 
 IMPORTANT: No warranty given, no liability accepted if you chose to use this
