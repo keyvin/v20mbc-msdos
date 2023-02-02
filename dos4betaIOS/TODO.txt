@@ -1,4 +1,0 @@
-Handle disk changes
-Real time clock. 
-
-AUX should just be duplicated to CON
