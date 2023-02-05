@@ -648,7 +648,7 @@ TIMER_INT:
 	   MOV AX, BIOSSEG
 	   MOV DS,AX
 	   MOV DI, OFFSET TIM_HSEC
-	   MOV AL,[CS:DI]
+	   MOV AL,CS:[DI]
 	   add al,10
 	   CMP AL,100
 	   MOV [DI],AL
@@ -693,27 +693,52 @@ TIM_NC:
 
 
 TIMER_INIT:
-		CLI
-		MOV AL,90h
-		OUT 01h,AL
-		IN  AL,00h
-		MOV BX, OFFSET TIM_SECS
-		MOV CS:[BX], AL
-		MOV BX, OFFSET TIM_MINS
-		IN AL,00h
-		MOV CS:[BX], AL
-		MOV BX, OFFSET TIM_HRS
-		IN AL,00H
-		MOV CS:[BX], AL
-		MOV BX, OFFSET TIM_DAYS
-		IN AL,00H
-		MOV CS:[BX], AL
-		INC BX
-		IN AL, 00H
-		MOV CS:[BX], AL
-		STI
-		;JMP EXIT
-		RET
+			CLI
+			MOV BX, OFFSET TIM_HSEC		
+			MOV AL,0
+			MOV CS:[BX],AL
+			MOV AL,90h
+			OUT 01h,AL
+			IN  AL,00h		
+			MOV BX, OFFSET TIM_SECS
+			CMP AL,60    ;NOT HEX
+			JB SET_SEC
+			MOV AL,0
+SET_SEC:	MOV CS:[BX], AL
+			MOV BX, OFFSET TIM_MINS
+			IN AL,00h
+			CMP AL,60    ;NOT HEX
+			JB SET_MIN
+			MOV AL,0
+SET_MIN:	MOV CS:[BX], AL
+			MOV BX, OFFSET TIM_HRS
+			IN AL,00H
+			CMP AL,24
+			JB SET_HRS
+			MOV AL,0
+SET_HRS:	MOV CS:[BX], AL
+			MOV BX, OFFSET TIM_DAYS
+			IN AL,00H
+			MOV CS:[BX], AL
+			INC BX
+			IN AL, 00H
+			MOV CS:[BX], AL
+			MOV BX, OFFSET TIM_DAYS
+			MOV AX,CS:[BX]
+			CMP AX, 10000
+			JA TI_EXIT
+			MOV AX,7671     ;2000
+			MOV CS:[BX],AX
+TI_EXIT:	STI
+			;JMP EXIT
+			RET
+
+		
+
+			
+		
+		
+
 
 TIM_WRT:
 		CLI
@@ -1170,6 +1195,10 @@ _jnk proc far
 	OR ax,ax
 	
 RE_INIT:
+		PUSH AX
+		PUSH BX
+		PUSH DS
+		PUSH CX
 		mov ax,ds
 		XOR BX,BX
 		MOV DS,BX
@@ -1185,8 +1214,10 @@ RE_INIT:
 		OUT 01H,AL
 		MOV AL,2   ;write to interrupt register
 		OUT 00H,AL
-		mov ds,bx
-	
+		POP CX
+		POP DS
+		POP BX
+		POP AX	
 		STI
 	    RET
 _jnk endp
@@ -1217,24 +1248,41 @@ HWINIT: XOR     BP,BP
 
         PUSH    CS
         POP     ES
-
-        MOV     BX,ROM_INIT
-        CALL    ROM_CALL
 		MOV     AH,0
-        MOV     MCON,AX
+ 
 		MOV     AL,01H
 		OUT     01h,al
 		mov     al,33
 		out     00h,al
-        MOV     AX,SEG SYSINIT
-        MOV     DS,AX
-
+		MOV     AX,SEG SYSINIT
+        MOV     DS,AX	
+		PUSH 	AX
+		PUSH 	BX
+		PUSH 	DS
+		MOV 	AX,0A000H  ; AREA TO TEST
+		MOV		DS,AX
+		XOR     BX,BX
+		MOV     AX, 0DEADH
+		MOV     [BX],AX
+		MOV     AX,[BX]
+		CMP 	AX,0DEADH   ;IS RAM PRESENT?
+		JZ      MTEST_F      ;YES, READ BACK VALUE WRITTEN
+		POP 	DS                     
+		MOV 	DS:[MEMORY_SIZE], 07FFEH    ;512K - IN PARAGRAPHS - 16 BYTTES PER
+		JMP     MTEST_EX
+MTEST_F:
+		POP     DS
+		MOV 	DS:[MEMORY_SIZE], 0FFFEH    ;1MB		
+MTEST_EX:		
+		
+		POP 	BX
+		POP  	AX		
+		
 ASSUME  DS:SEG SYSINIT
-
+		
         MOV     AX,CS
         ADD     AX,BIOSIZS
-        MOV     DS:[CURRENT_DOS_LOCATION],AX
-        MOV     DS:[MEMORY_SIZE],MAX_MEM
+        MOV     DS:[CURRENT_DOS_LOCATION],AX       
         MOV     AX,CS
         MOV     WORD PTR DS:[DEVICE_LIST+2],AX
         MOV     WORD PTR DS:[DEVICE_LIST],OFFSET DEVSTART
