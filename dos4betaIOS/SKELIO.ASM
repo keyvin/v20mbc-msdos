@@ -19,7 +19,7 @@ ANSI    EQU     0               ;Ansi switch.
 
 QSIZE   EQU     100             ;Input queue size.
 BIOSSEG EQU     0C0H            ;I/O system segment.
-MAX_MEM EQU     0F000H           ;Memory size in paragraphs. 
+MAX_MEM EQU     07000H           ;Memory size in paragraphs. 
 
 ; Constants for commands in Altos ROM.
 
@@ -1154,6 +1154,23 @@ E_DRW:
         PAGE
         SUBTTL  Disk Error processing.
 
+
+
+BIOS_VER DB 0AH,0DH,"IO.SYS VERSION 3",0AH,0DH,0,0 
+PRINT_VERSION:
+	MOV DI,OFFSET BIOS_VER	
+PVL:	MOV BL,[DI]
+	CMP BL, 0
+	JZ PV_EXIT
+	MOV AL,BL
+	CALL OUTCHR
+	INC Di
+	JMP PVL
+	
+PV_EXIT:
+	RET	
+
+
 ;
 ; Disk error routine.
 ;
@@ -1239,6 +1256,8 @@ ROM_CALL:
         PAGE
         SUBTTL  Initalization code and temporary work areas.
 
+
+
 ;
 ; Overlayed by MSDOS by SYSINIT.
 ;
@@ -1246,6 +1265,7 @@ ROM_CALL:
 WRKSTK  LABEL   WORD
         DB      100 DUP (?)
 
+MEM_SZ   DW 0FFEEH
 
 HWINIT: XOR     BP,BP
         MOV     SS,BP
@@ -1253,41 +1273,40 @@ HWINIT: XOR     BP,BP
 
         PUSH    CS
         POP     ES
-		MOV     AH,0
+	  MOV     al,33
+        CALL    OUTCHR
+	  CALL    PRINT_VERSION
  
-		MOV     AL,01H
-		OUT     01h,al
-		mov     al,33
-		out     00h,al
-		MOV     AX,SEG SYSINIT
+		
+	  MOV     AX,SEG SYSINIT
         MOV     DS,AX	
-		PUSH 	AX
-		PUSH 	BX
-		PUSH 	DS
-		MOV 	AX,0A000H  ; AREA TO TEST
-		MOV		DS,AX
-		XOR     BX,BX
-		MOV     AX, 0DEADH
-		MOV     [BX],AX
-		MOV     AX,[BX]
-		CMP 	AX,0DEADH   ;IS RAM PRESENT?
-		JZ      MTEST_F      ;YES, READ BACK VALUE WRITTEN
-		POP 	DS                     
-		MOV 	DS:[MEMORY_SIZE], 07FFEH    ;512K - IN PARAGRAPHS - 16 BYTTES PER
-		JMP     MTEST_EX
+	  PUSH    AX
+	  PUSH    BX
+ 	  PUSH    DS
+	  MOV     AX,0A000H  ; AREA TO TEST
+	  MOV	    DS,AX
+	  XOR     BX,BX
+	  MOV     AX, 0DEADH
+	  MOV     [BX],AX
+	  MOV     AX,[BX]
+	  CMP     AX,0DEADH   ;IS RAM PRESENT?
+	  JZ      MTEST_F      ;YES, READ BACK VALUE WRITTEN
+	  POP     DS                     
+	  MOV     DS:[MEMORY_SIZE], 07F00H    ;512K - IN PARAGRAPHS - 16 BYTTES PER
+	  JMP     MTEST_EX
 MTEST_F:
-		POP     DS
-		MOV 	DS:[MEMORY_SIZE], 0FFFEH    ;1MB		
+	  POP     DS
+	  MOV     DS:[MEMORY_SIZE], 0FF00H    ;1MB		
 MTEST_EX:		
-		
-		POP 	BX
-		POP  	AX		
-		
+	  POP 	BX
+	  POP  	AX	
 ASSUME  DS:SEG SYSINIT
 		
         MOV     AX,CS
         ADD     AX,BIOSIZS
-        MOV     DS:[CURRENT_DOS_LOCATION],AX       
+        MOV     DS:[CURRENT_DOS_LOCATION],AX
+	  MOV     AX,MAX_MEM
+	  MOV     DS:[MEMORY_SIZE], AX    ;1MB		       
         MOV     AX,CS
         MOV     WORD PTR DS:[DEVICE_LIST+2],AX
         MOV     WORD PTR DS:[DEVICE_LIST],OFFSET DEVSTART
